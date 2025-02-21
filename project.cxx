@@ -36,6 +36,10 @@ private:
         return false;
     }
 
+    bool vectorExists(const std::vector<int>& vec, const std::vector<std::vector<int>>& level) {
+        return std::find(level.begin(), level.end(), vec) != level.end();
+    }
+
 public:
     HilbertBasis(const std::vector<std::vector<int>>& eqs) 
         : equations(eqs), numEquations(eqs.size()), numVars(eqs[0].size()) {}
@@ -85,7 +89,8 @@ public:
                             newCombination[i]++;
                             
                             // Only add if not greater than any existing basis vector
-                            if (!isGreaterThanAnyBasis(newCombination, basis)) {
+                            if (!isGreaterThanAnyBasis(newCombination, basis) && 
+                                !vectorExists(newCombination, nextLevel)) {
                                 nextLevel.push_back(newCombination);
                             }
                         }
