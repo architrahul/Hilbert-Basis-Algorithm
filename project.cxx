@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <ostream>
 #include <iostream>
+#include <chrono>
 
 class HilbertBasis {
 private:
@@ -113,8 +114,14 @@ public:
 int main() {
     std::vector<std::vector<int>> equations = {{-1, -1}, {1, 3}, {2, -2}, {-3, -1}};
     
+    auto start = std::chrono::high_resolution_clock::now();
+
     HilbertBasis hb(equations);
     std::vector<std::vector<int>> basis = hb.compute();
+
+    // End timing
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     
     // Print the basis
     for (const auto& solution : basis) {
@@ -123,6 +130,10 @@ int main() {
         }
         std::cout << std::endl;
     }
+
+    // Print execution time
+    std::cout << "\nExecution time: " << duration.count() << " microseconds";
+    std::cout << " (" << duration.count() / 1000.0 << " milliseconds)" << std::endl;
     
     return 0;
 }
