@@ -7,6 +7,9 @@
 #include <numeric>
 #include <sstream>
 
+// Set to 1 to enable debug output, 0 to disable
+#define DEBUG 0
+
 // Vector hash function for unordered_set
 struct VectorHash {
     size_t operator()(const std::vector<int>& v) const {
@@ -91,6 +94,7 @@ public:
         
         int levelCount = 1;  // Start at level 1
         
+#if DEBUG
         std::cout << "\nLevel " << levelCount << ":" << std::endl;
         for (int i = 0; i < numEquations; i++) {
             std::cout << "path " << i << ": (";
@@ -101,6 +105,7 @@ public:
             }
             std::cout << ")" << std::endl;
         }
+#endif
         
         while (!currentLevel.empty() && levelCount < 10) {
             std::vector<std::vector<int>> nextLevel;
@@ -110,6 +115,7 @@ public:
             for (const auto& current : currentLevel) {
                 auto actualVector = calculateActualVector(current);
                 
+#if DEBUG
                 // Print the current vector
                 std::cout << "(";
                 for (size_t i = 0; i < current.size(); i++) {
@@ -136,14 +142,18 @@ public:
                     std::cout << "no positions frozen";
                 }
                 std::cout << ")" << std::endl;
+#endif
                 
                 if (isSolutionVector(actualVector)) {
                     // Add to basis (we've already skipped null vectors by starting at level 1)
                     basis.push_back(current);
+#if DEBUG
                     std::cout << "  → Added to basis (solution vector)" << std::endl;
+#endif
                     continue;
                 }
                 
+#if DEBUG
                 // Print valid paths
                 std::cout << "  Valid paths: ";
                 bool anyValid = false;
@@ -167,6 +177,7 @@ public:
                 }
                 if (!anyValid) std::cout << "none";
                 std::cout << std::endl;
+#endif
 
                 // Process each valid path
                 bool anyPathAdded = false;
@@ -192,7 +203,9 @@ public:
             
             levelCount++;
             if (!nextLevel.empty()) {
+#if DEBUG
                 std::cout << "\nLevel " << levelCount << ":" << std::endl;
+#endif
             }
             currentLevel = std::move(nextLevel);
         }
@@ -214,7 +227,7 @@ int main() {
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     
-    // Print the final basis
+    // Print the final basis (always show this regardless of DEBUG setting)
     std::cout << "\nFinal Hilbert Basis:" << std::endl;
     for (const auto& solution : basis) {
         std::cout << "(";
@@ -225,7 +238,7 @@ int main() {
         std::cout << ")" << std::endl;
     }
 
-    // Print execution time
+    // Print execution time (always show this regardless of DEBUG setting)
     std::cout << "\nExecution time: " << duration.count() << " microseconds";
     std::cout << " (" << duration.count() / 1000.0 << " milliseconds)" << std::endl;
     
