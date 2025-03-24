@@ -1,118 +1,117 @@
 #include <vector>
-#include <stack>
+#include <unordered_set>
 #include <algorithm>
-#include <ostream>
 #include <iostream>
 #include <chrono>
+#include <string>
+#include <numeric>
+
+// Add a hash function for vectors to use with unordered_set
+struct VectorHash {
+    size_t operator()(const std::vector<int>& v) const {
+        size_t hash = v.size();
+        for (auto& i : v) {
+            hash ^= i + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+        }
+        return hash;
+    }
+};
 
 class HilbertBasis {
 private:
-    std::vector<std::vector<int>> equations; // Matrix representing a(x)
-    int numVars;                            // Number of variables
-    int numEquations;                       // Number of equations
+    const std::vector<std::vector<int>>& equations;  // Changed to reference
+    const int numVars;
+    const int numEquations;
+    std::unordered_set<std::vector<int>, VectorHash> seenVectors;  // Cache seen vectors
 
-    // Helper function to check if t1 <= t2 componentwise
-    bool isGreaterThanAnyBasis(const std::vector<int>& vec, const std::vector<std::vector<int>>& basis) {
-        for (const auto& basisVec : basis) {
-            bool isGreater = true;
-            for (size_t i = 0; i < vec.size(); i++) {
-                if (vec[i] < basisVec[i]) {
-                    isGreater = false;
-                    break;
+    // Optimized actual vector calculation using vector operations
+    std::vector<int> calculateActualVector(const std::vector<int>& combination) {
+        std::vector<int> result(numVars, 0);
+        for (int i = 0; i < numEquations; i++) {
+            if (combination[i] != 0) {  // Skip if coefficient is 0
+                for (int j = 0; j < numVars; j++) {
+                    result[j] += combination[i] * equations[i][j];
                 }
             }
-            if (isGreater) return true;
         }
-        return false;
+        return result;
     }
 
-    // Helper function to check dot product of two vectors
-    bool dotProduct(const std::vector<int>& v1, const std::vector<int>& v2) {
-        int sum = 0;
-        for (int i = 0; i < numVars; i++) {
-            sum += v1[i] * v2[i];
-        }
-        if (sum >= 0) return true;
-        return false;
+    // Optimized solution check
+    bool isSolutionVector(const std::vector<int>& vec) const {
+        return std::all_of(vec.begin(), vec.end(), [](int x) { return x == 0; });
     }
 
-    bool vectorExists(const std::vector<int>& vec, const std::vector<std::vector<int>>& level) {
-        return std::find(level.begin(), level.end(), vec) != level.end();
+    // Optimized dot product using std::inner_product
+    bool hasNegativeDotProduct(const std::vector<int>& v1, const std::vector<int>& v2) const {
+        return std::inner_product(v1.begin(), v1.end(), v2.begin(), 0) < 0;
+    }
+
+    bool isGreaterThanAnyBasis(const std::vector<int>& vec, 
+                              const std::vector<std::vector<int>>& basis) const {
+    return std::any_of(basis.begin(), basis.end(),
+    [&vec](const std::vector<int>& basisVec) {  // Explicitly specify type
+    return std::equal(vec.begin(), vec.end(), basisVec.begin(),
+    [](int a, int b) { return a >= b; });
+    });
     }
 
 public:
     HilbertBasis(const std::vector<std::vector<int>>& eqs) 
-        : equations(eqs), numEquations(eqs.size()), numVars(eqs[0].size()) {}
+        : equations(eqs), numEquations(eqs.size()), numVars(eqs[0].size()) {
+        seenVectors.reserve(1000);  // Prereserve space
+    }
 
-        std::vector<std::vector<int>> compute() {
-            std::vector<std::vector<int>> basis;
-            std::vector<std::vector<int>> currentLevel;
-            int levelCount = 0;
-            
-            // Initialize starting level with unit vectors
-            for (int i = 0; i < numEquations; i++) {
-                std::vector<int> unitVector(numEquations, 0);
-                unitVector[i] = 1;
-                currentLevel.push_back(unitVector);
-            }
+    std::vector<std::vector<int>> compute() {
+        std::vector<std::vector<int>> basis;
+        std::vector<std::vector<int>> currentLevel;
+        basis.reserve(100);  // Prereserve space
+        currentLevel.reserve(100);
         
-            while (!currentLevel.empty() && levelCount < 10) {
-                levelCount++;
-                std::vector<std::vector<int>> nextLevel;
+        // Initialize with unit vectors
+        for (int i = 0; i < numEquations; i++) {
+            std::vector<int> unitVector(numEquations, 0);
+            unitVector[i] = 1;
+            currentLevel.push_back(std::move(unitVector));
+        }
+
+        int levelCount = 0;
+        while (!currentLevel.empty() && levelCount++ < 10) {
+            std::vector<std::vector<int>> nextLevel;
+            nextLevel.reserve(currentLevel.size() * numEquations);
+
+            for (const auto& current : currentLevel) {
+                auto actualVector = calculateActualVector(current);
                 
-                for (const auto& current : currentLevel) {
-                    // Calculate the actual vector from linear combination
-                    std::vector<int> actualVector(numVars, 0);
-                    for (int i = 0; i < numEquations; i++) {
-                        for (int j = 0; j < numVars; j++) {
-                            actualVector[j] += current[i] * equations[i][j];
-                        }
-                    }
-                    
-                    // Check if this is a solution (sum = 0)
-                    bool isSolution = true;
-                    for (int j = 0; j < numVars; j++) {
-                        if (actualVector[j] != 0) {
-                            isSolution = false;
-                            break;
-                        }
-                    }
-                    if (isSolution) {
-                        basis.push_back(current);  // Store the combination vector instead
-                        continue;
-                    }
-                    
-                    // Generate next level combinations
-                    for (int i = 0; i < numEquations; i++) {
-                        if (!dotProduct(equations[i], actualVector)) {
-                            std::vector<int> newCombination = current;
-                            newCombination[i]++;
-                            
-                            // Only add if not greater than any existing basis vector
-                            if (!isGreaterThanAnyBasis(newCombination, basis) && 
-                                !vectorExists(newCombination, nextLevel)) {
-                                nextLevel.push_back(newCombination);
-                            }
+                if (isSolutionVector(actualVector)) {
+                    basis.push_back(current);
+                    continue;
+                }
+
+                for (int i = 0; i < numEquations; i++) {
+                    if (hasNegativeDotProduct(equations[i], actualVector)) {
+                        auto newCombination = current;
+                        newCombination[i]++;
+                        
+                        // Use seenVectors cache to avoid duplicates
+                        if (!isGreaterThanAnyBasis(newCombination, basis) && 
+                            seenVectors.insert(newCombination).second) {
+                            nextLevel.push_back(std::move(newCombination));
                         }
                     }
                 }
-                
-                // Debug output
-                std::cout << "Level " << levelCount << ":" << std::endl;
-                std::cout << "Current Level Size: " << currentLevel.size() << std::endl;
-                std::cout << "Next Level Size: " << nextLevel.size() << std::endl;
-                std::cout << "Current Basis Size: " << basis.size() << std::endl;
-                std::cout << "------------------------" << std::endl;
-                
-                currentLevel = nextLevel;
             }
-            
-            if (levelCount >= 10) {
-                std::cout << "Warning: Maximum level (10) reached." << std::endl;
-            }
-            
-            return basis;
+            std::cout << "Level " << levelCount << ":" << std::endl;
+            std::cout << "Current Level Size: " << currentLevel.size() << std::endl;
+            std::cout << "Next Level Size: " << nextLevel.size() << std::endl;
+            std::cout << "Current Basis Size: " << basis.size() << std::endl;
+            std::cout << "------------------------" << std::endl;
+
+            currentLevel = std::move(nextLevel);
         }
+        
+        return basis;
+    }
 };
 
 // Example usage
