@@ -6,6 +6,9 @@
 #include <string>
 #include <numeric>
 
+// Set to 1 to enable debug output, 0 to disable
+#define DEBUG 0
+
 // Add a hash function for vectors to use with unordered_set
 struct VectorHash {
     size_t operator()(const std::vector<int>& v) const {
@@ -49,11 +52,11 @@ private:
 
     bool isGreaterThanAnyBasis(const std::vector<int>& vec, 
                               const std::vector<std::vector<int>>& basis) const {
-    return std::any_of(basis.begin(), basis.end(),
-    [&vec](const std::vector<int>& basisVec) {  // Explicitly specify type
-    return std::equal(vec.begin(), vec.end(), basisVec.begin(),
-    [](int a, int b) { return a >= b; });
-    });
+        return std::any_of(basis.begin(), basis.end(),
+            [&vec](const std::vector<int>& basisVec) {  // Explicitly specify type
+                return std::equal(vec.begin(), vec.end(), basisVec.begin(),
+                    [](int a, int b) { return a >= b; });
+            });
     }
 
 public:
@@ -80,16 +83,59 @@ public:
             std::vector<std::vector<int>> nextLevel;
             nextLevel.reserve(currentLevel.size() * numEquations);
 
+#if DEBUG
+            // Print current vectors being processed
+            std::cout << "\nProcessing vectors at level " << levelCount << ":" << std::endl;
+            for (const auto& vec : currentLevel) {
+                std::cout << "  (";
+                for (size_t i = 0; i < vec.size(); i++) {
+                    std::cout << vec[i];
+                    if (i < vec.size() - 1) std::cout << ",";
+                }
+                std::cout << ")" << std::endl;
+            }
+#endif
+
             for (const auto& current : currentLevel) {
                 auto actualVector = calculateActualVector(current);
                 
+#if DEBUG
+                // Print current vector and its actual vector
+                std::cout << "(";
+                for (size_t i = 0; i < current.size(); i++) {
+                    std::cout << current[i];
+                    if (i < current.size() - 1) std::cout << ",";
+                }
+                std::cout << ") -> Actual: (";
+                for (size_t i = 0; i < actualVector.size(); i++) {
+                    std::cout << actualVector[i];
+                    if (i < actualVector.size() - 1) std::cout << ",";
+                }
+                std::cout << ")" << std::endl;
+#endif
+                
                 if (isSolutionVector(actualVector)) {
                     basis.push_back(current);
+#if DEBUG
+                    std::cout << "  → Added to basis (solution vector)" << std::endl;
+#endif
                     continue;
                 }
 
+#if DEBUG
+                // Print valid paths
+                std::cout << "  Valid paths: ";
+                bool anyValid = false;
+#endif
+
                 for (int i = 0; i < numEquations; i++) {
                     if (hasNegativeDotProduct(equations[i], actualVector)) {
+#if DEBUG
+                        if (anyValid) std::cout << ", ";
+                        std::cout << "path " << i;
+                        anyValid = true;
+#endif
+                        
                         auto newCombination = current;
                         newCombination[i]++;
                         
@@ -97,15 +143,30 @@ public:
                         if (!isGreaterThanAnyBasis(newCombination, basis) && 
                             seenVectors.insert(newCombination).second) {
                             nextLevel.push_back(std::move(newCombination));
+#if DEBUG
+                            std::cout << " (added)";
+#endif
                         }
+#if DEBUG
+                        else {
+                            std::cout << " (skipped - already seen or dominated)";
+                        }
+#endif
                     }
                 }
+#if DEBUG
+                if (!anyValid) std::cout << "none";
+                std::cout << std::endl;
+#endif
             }
-            std::cout << "Level " << levelCount << ":" << std::endl;
+
+#if DEBUG
+            std::cout << "\nLevel " << levelCount << " Summary:" << std::endl;
             std::cout << "Current Level Size: " << currentLevel.size() << std::endl;
             std::cout << "Next Level Size: " << nextLevel.size() << std::endl;
             std::cout << "Current Basis Size: " << basis.size() << std::endl;
             std::cout << "------------------------" << std::endl;
+#endif
 
             currentLevel = std::move(nextLevel);
         }
@@ -127,15 +188,18 @@ int main() {
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     
-    // Print the basis
+    // Print the basis (always show this regardless of DEBUG setting)
+    std::cout << "\nFinal Hilbert Basis:" << std::endl;
     for (const auto& solution : basis) {
-        for (int x : solution) {
-            std::cout << x << " ";
+        std::cout << "(";
+        for (size_t i = 0; i < solution.size(); i++) {
+            std::cout << solution[i];
+            if (i < solution.size() - 1) std::cout << ", ";
         }
-        std::cout << std::endl;
+        std::cout << ")" << std::endl;
     }
 
-    // Print execution time
+    // Print execution time (always show this regardless of DEBUG setting)
     std::cout << "\nExecution time: " << duration.count() << " microseconds";
     std::cout << " (" << duration.count() / 1000.0 << " milliseconds)" << std::endl;
     

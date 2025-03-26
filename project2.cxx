@@ -1,5 +1,4 @@
 #include <vector>
-#include <unordered_set>
 #include <algorithm>
 #include <iostream>
 #include <chrono>
@@ -10,23 +9,11 @@
 // Set to 1 to enable debug output, 0 to disable
 #define DEBUG 0
 
-// Vector hash function for unordered_set
-struct VectorHash {
-    size_t operator()(const std::vector<int>& v) const {
-        size_t hash = v.size();
-        for (auto& i : v) {
-            hash ^= i + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        }
-        return hash;
-    }
-};
-
 class HilbertBasis {
 private:
     const std::vector<std::vector<int>>& equations;
     const int numVars;
     const int numEquations;
-    std::unordered_set<std::vector<int>, VectorHash> seenVectors;
 
     // Calculate the actual vector by multiplying the combination with equations
     std::vector<int> calculateActualVector(const std::vector<int>& combination) {
@@ -69,15 +56,13 @@ private:
             if (combination[i] > 0) highestTakenIndex = i;
         }
         
-        // At level 1 and beyond, positions after the highest taken index are frozen
+        // Positions after the highest taken index are frozen
         return position > highestTakenIndex;
     }
 
 public:
     HilbertBasis(const std::vector<std::vector<int>>& eqs) 
-        : equations(eqs), numEquations(eqs.size()), numVars(eqs[0].size()) {
-        seenVectors.reserve(1000);
-    }
+        : equations(eqs), numEquations(eqs.size()), numVars(eqs[0].size()) {}
 
     std::vector<std::vector<int>> compute() {
         std::vector<std::vector<int>> basis;
@@ -145,7 +130,6 @@ public:
 #endif
                 
                 if (isSolutionVector(actualVector)) {
-                    // Add to basis (we've already skipped null vectors by starting at level 1)
                     basis.push_back(current);
 #if DEBUG
                     std::cout << "  → Added to basis (solution vector)" << std::endl;
@@ -180,7 +164,6 @@ public:
 #endif
 
                 // Process each valid path
-                bool anyPathAdded = false;
                 for (int i = 0; i < numEquations; i++) {
                     // Skip frozen positions
                     if (isPositionFrozen(i, current)) {
@@ -191,11 +174,10 @@ public:
                         auto newCombination = current;
                         newCombination[i]++;
                         
-                        // Avoid duplicates and dominated vectors
-                        if (!isGreaterThanAnyBasis(newCombination, basis) && 
-                            seenVectors.insert(newCombination).second) {
+                        // Only check for dominance, no need to check for duplicates
+                        // since the freezing mechanism prevents duplicates
+                        if (!isGreaterThanAnyBasis(newCombination, basis)) {
                             nextLevel.push_back(std::move(newCombination));
-                            anyPathAdded = true;
                         }
                     }
                 }
