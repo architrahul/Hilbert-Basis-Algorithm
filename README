@@ -7,6 +7,7 @@ To make project2 executable: clang++ -std=c++11 -o hilbert2 project2.cxx
 To run project2 executable: ./hilbert2
 To do: figure out why it's slower than normal algorithm and add debug statements
 
+Output:
 --- Level 1 ---
 Current Combination: (1, 0, 0, 0)
   Frozen States (from parent pair): (F, T, T, T)
