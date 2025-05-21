@@ -48,6 +48,8 @@
         "unordered_map": "cpp",
         "variant": "cpp",
         "algorithm": "cpp",
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "charconv": "cpp",
+        "unordered_set": "cpp"
     }
 }

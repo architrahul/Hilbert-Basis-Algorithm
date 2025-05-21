@@ -7,7 +7,9 @@
 #include <sstream>
 
 // Set to 1 to enable debug output, 0 to disable
-#define DEBUG 0
+#define DEBUG 1
+
+#define level_limit 10000
 
 class HilbertBasis {
 private:
@@ -19,7 +21,7 @@ private:
     std::vector<int> calculateActualVector(const std::vector<int>& combination) {
         std::vector<int> result(numVars, 0);
         for (int i = 0; i < numEquations; i++) {
-            if (combination[i] != 0) {  // Skip if coefficient is 0
+            if (combination[i] != 0) {
                 for (int j = 0; j < numVars; j++) {
                     result[j] += combination[i] * equations[i][j];
                 }
@@ -48,150 +50,138 @@ private:
             });
     }
 
-    // Check if a position is frozen in the current vector
-    bool isPositionFrozen(int position, const std::vector<int>& combination) const {
-        // Find highest taken position (highest priority path taken)
-        int highestTakenIndex = -1;
-        for (int i = 0; i < numEquations; i++) {
-            if (combination[i] > 0) highestTakenIndex = i;
-        }
-        
-        // Positions after the highest taken index are frozen
-        return position > highestTakenIndex;
-    }
-
-public:
+    public:
     HilbertBasis(const std::vector<std::vector<int>>& eqs) 
         : equations(eqs), numEquations(eqs.size()), numVars(eqs[0].size()) {}
 
     std::vector<std::vector<int>> compute() {
         std::vector<std::vector<int>> basis;
-        std::vector<std::vector<int>> currentLevel;
-        basis.reserve(100);
-        currentLevel.reserve(100);
+        std::vector<std::pair<std::vector<int>, std::vector<bool>>> currentLevelPairs;
         
-        // Start at level 1 with unit vectors
+        basis.reserve(numEquations); // As in your original code
+        currentLevelPairs.reserve(numEquations); // As in your original code
+
+        // Start at level 1 with unit vectors and their initial frozen states
         for (int i = 0; i < numEquations; i++) {
             std::vector<int> unitVector(numEquations, 0);
             unitVector[i] = 1;
-            currentLevel.push_back(unitVector);
-        }
-        
-        int levelCount = 1;  // Start at level 1
-        
-#if DEBUG
-        std::cout << "\nLevel " << levelCount << ":" << std::endl;
-        for (int i = 0; i < numEquations; i++) {
-            std::cout << "path " << i << ": (";
-            for (int j = 0; j < numEquations; j++) {
-                if (j > 0) std::cout << ",";
-                if (j == i) std::cout << "1";
-                else std::cout << "0";
+
+            std::vector<bool> initialFrozenStatus(numEquations, false);
+            for (int j = i + 1; j < numEquations; j++) {
+                initialFrozenStatus[j] = true;
             }
-            std::cout << ")" << std::endl;
+            currentLevelPairs.push_back({unitVector, initialFrozenStatus});
         }
+        
+        int levelCount = 1;
+#if DEBUG
+        std::cout << "\n--- Level " << levelCount << " ---" << std::endl;
 #endif
         
-        while (!currentLevel.empty() && levelCount < 10) {
-            std::vector<std::vector<int>> nextLevel;
-            nextLevel.reserve(currentLevel.size() * numEquations);
+        while (!currentLevelPairs.empty() && levelCount < level_limit) {
+            std::vector<std::pair<std::vector<int>, std::vector<bool>>> nextLevelPairs;
+            nextLevelPairs.reserve(currentLevelPairs.size() * numEquations);
     
-            // Process each vector at the current level
-            for (const auto& current : currentLevel) {
-                auto actualVector = calculateActualVector(current);
+            for (const auto& currentPair : currentLevelPairs) {
+                const std::vector<int>& currentCombination = currentPair.first;
+                // currentFrozenStatus is a modifiable copy of the frozen status from the pair
+                std::vector<bool> currentFrozenStatus_localCopy = currentPair.second; 
                 
+                auto actualVector = calculateActualVector(currentCombination);
 #if DEBUG
-                // Print the current vector
-                std::cout << "(";
-                for (size_t i = 0; i < current.size(); i++) {
-                    std::cout << current[i];
-                    if (i < current.size() - 1) std::cout << ",";
+                std::cout << "Current Combination: (";
+                for (size_t i = 0; i < currentCombination.size(); i++) {
+                    std::cout << currentCombination[i] << (i < currentCombination.size() - 1 ? ", " : "");
                 }
-                std::cout << ")";
-                
-                // Print which positions are frozen
-                std::cout << " (";
-                int highestTakenIndex = -1;
-                for (int i = 0; i < numEquations; i++) {
-                    if (current[i] > 0) highestTakenIndex = i;
-                }
-                
-                if (highestTakenIndex != -1) {
-                    bool firstFrozen = true;
-                    for (int i = highestTakenIndex + 1; i < numEquations; i++) {
-                        if (!firstFrozen) std::cout << ", ";
-                        std::cout << "position " << i << " frozen";
-                        firstFrozen = false;
-                    }
-                } else {
-                    std::cout << "no positions frozen";
+                std::cout << ")" << std::endl;
+
+                std::cout << "  Frozen States (from parent pair): (";
+                for (size_t i = 0; i < currentPair.second.size(); i++) { 
+                    std::cout << (currentPair.second[i] ? "T" : "F") << (i < currentPair.second.size() - 1 ? ", " : "");
                 }
                 std::cout << ")" << std::endl;
 #endif
                 
                 if (isSolutionVector(actualVector)) {
-                    basis.push_back(current);
+                    basis.push_back(currentCombination);
 #if DEBUG
-                    std::cout << "  → Added to basis (solution vector)" << std::endl;
+                    std::cout << "  --> Added to Hilbert Basis." << std::endl;
 #endif
                     continue;
                 }
                 
+                // The `possiblePaths` variable was a copy and unused, so removed.
+                // Debug for "possible paths" based on the frozen status *before* inner loop modifications
 #if DEBUG
-                // Print valid paths
-                std::cout << "  Valid paths: ";
-                bool anyValid = false;
-                for (int i = 0; i < numEquations; i++) {
-                    // Skip frozen positions
-                    if (isPositionFrozen(i, current)) {
-                        continue;
+                std::cout << "  Possible Paths (evaluating from current combination):" << std::endl;
+                for (int i = 0; i < numEquations; ++i) { 
+                    std::cout << "    Path " << i << ": ";
+                    if (currentPair.second[i]) { // Use the original frozen status for this display
+                        std::cout << "FROZEN (from parent)";
+                    } else if (hasNegativeDotProduct(equations[i], actualVector)) {
+                        std::cout << "AVAILABLE";
+                    } else {
+                        std::cout << "NO NEG DOT PRODUCT";
                     }
-                    
-                    if (hasNegativeDotProduct(equations[i], actualVector)) {
-                        if (anyValid) std::cout << ", ";
-                        std::cout << "path " << i << " (+";
-                        for (int j = 0; j < numEquations; j++) {
-                            if (j > 0) std::cout << ",";
-                            if (j == i) std::cout << "1";
-                            else std::cout << "0";
-                        }
-                        std::cout << ")";
-                        anyValid = true;
-                    }
+                    std::cout << std::endl;
                 }
-                if (!anyValid) std::cout << "none";
-                std::cout << std::endl;
 #endif
+                // This variable `possiblePaths` was unused in your original code after this line.
+                // std::vector<bool> possiblePaths = currentFrozenStatus_localCopy; 
+                int prevPathIdx = -1;
 
-                // Process each valid path
-                for (int i = 0; i < numEquations; i++) {
-                    // Skip frozen positions
-                    if (isPositionFrozen(i, current)) {
+                // Inner loop iterates from high to low index.
+                for (int path_taken_idx = numEquations - 1; path_taken_idx >= 0; path_taken_idx--) {
+                    // Use the local copy `currentFrozenStatus_localCopy` which might be modified by prevPathIdx logic
+                    if (currentFrozenStatus_localCopy[path_taken_idx]) { 
                         continue;
                     }
                     
-                    if (hasNegativeDotProduct(equations[i], actualVector)) {
-                        auto newCombination = current;
-                        newCombination[i]++;
+                    if (hasNegativeDotProduct(equations[path_taken_idx], actualVector)) {
+                        auto newCombination = currentCombination;
+                        newCombination[path_taken_idx]++;
                         
-                        // Only check for dominance, no need to check for duplicates
-                        // since the freezing mechanism prevents duplicates
+                        // Your existing logic for modifying currentFrozenStatus_localCopy and creating newFrozenStatus
+                        if (prevPathIdx != -1) {
+                            currentFrozenStatus_localCopy[prevPathIdx] = true; 
+                        }
+                        std::vector<bool> newFrozenStatus = currentFrozenStatus_localCopy; 
+                        prevPathIdx = path_taken_idx; 
+                        
                         if (!isGreaterThanAnyBasis(newCombination, basis)) {
-                            nextLevel.push_back(std::move(newCombination));
+#if DEBUG
+                            std::cout << "    Taking path " << path_taken_idx << ". New Combination: (";
+                            for (size_t i = 0; i < newCombination.size(); i++) {
+                                std::cout << newCombination[i] << (i < newCombination.size() - 1 ? ", " : "");
+                            }
+                            std::cout << ")" << std::endl;
+                            std::cout << "      New Frozen States for next level: (";
+                            for (size_t i = 0; i < newFrozenStatus.size(); i++) {
+                                std::cout << (newFrozenStatus[i] ? "T" : "F") << (i < newFrozenStatus.size() - 1 ? ", " : "");
+                            }
+                            std::cout << ")" << std::endl;
+#endif
+                            nextLevelPairs.push_back({newCombination, newFrozenStatus});
                         }
                     }
                 }
             }
             
             levelCount++;
-            if (!nextLevel.empty()) {
+            currentLevelPairs = std::move(nextLevelPairs);
 #if DEBUG
-                std::cout << "\nLevel " << levelCount << ":" << std::endl;
-#endif
+            if (!currentLevelPairs.empty()) {
+                std::cout << "\n--- Level " << levelCount << " ---" << std::endl;
+            } else if (levelCount < level_limit) { 
+                std::cout << "\n--- No more vectors to process. Algorithm finished. ---" << std::endl;
             }
-            currentLevel = std::move(nextLevel);
+#endif
         }
-        
+#if DEBUG
+        if (levelCount >= level_limit && !currentLevelPairs.empty()) {
+             std::cout << "\n--- Reached level_limit (" << level_limit << "). Stopping. ---" << std::endl;
+        }
+#endif
         return basis;
     }
 };
@@ -210,7 +200,7 @@ int main() {
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     
     // Print the final basis (always show this regardless of DEBUG setting)
-    std::cout << "\nFinal Hilbert Basis:" << std::endl;
+    std::cout << "\nHilbert Basis:" << std::endl;
     for (const auto& solution : basis) {
         std::cout << "(";
         for (size_t i = 0; i < solution.size(); i++) {

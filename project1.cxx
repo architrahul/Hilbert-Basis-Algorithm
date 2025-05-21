@@ -7,7 +7,7 @@
 #include <numeric>
 
 // Set to 1 to enable debug output, 0 to disable
-#define DEBUG 0
+#define DEBUG 1
 
 // Add a hash function for vectors to use with unordered_set
 struct VectorHash {
