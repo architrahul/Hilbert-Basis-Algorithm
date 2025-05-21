@@ -1,0 +1,153 @@
+Basic Algorithm to calculate hilbert basis: Project1
+To make project1 executable: clang++ -std=c++11 -o hilbert1 project1.cxx
+To run project1 executable: ./hilbert1
+
+Modified algorithm to calc hilber basis(not sure if it works): Project2
+To make project2 executable: clang++ -std=c++11 -o hilbert2 project2.cxx
+To run project2 executable: ./hilbert2
+To do: figure out why it's slower than normal algorithm and add debug statements
+
+--- Level 1 ---
+Current Combination: (1, 0, 0, 0)
+  Frozen States (from parent pair): (F, T, T, T)
+  Possible Paths (evaluating from current combination):
+    Path 0: NO NEG DOT PRODUCT
+    Path 1: FROZEN (from parent)
+    Path 2: FROZEN (from parent)
+    Path 3: FROZEN (from parent)
+Current Combination: (0, 1, 0, 0)
+  Frozen States (from parent pair): (F, F, T, T)
+  Possible Paths (evaluating from current combination):
+    Path 0: AVAILABLE
+    Path 1: NO NEG DOT PRODUCT
+    Path 2: FROZEN (from parent)
+    Path 3: FROZEN (from parent)
+    Taking path 0. New Combination: (1, 1, 0, 0)
+      New Frozen States for next level: (F, F, T, T)
+Current Combination: (0, 0, 1, 0)
+  Frozen States (from parent pair): (F, F, F, T)
+  Possible Paths (evaluating from current combination):
+    Path 0: NO NEG DOT PRODUCT
+    Path 1: AVAILABLE
+    Path 2: NO NEG DOT PRODUCT
+    Path 3: FROZEN (from parent)
+    Taking path 1. New Combination: (0, 1, 1, 0)
+      New Frozen States for next level: (F, F, F, T)
+Current Combination: (0, 0, 0, 1)
+  Frozen States (from parent pair): (F, F, F, F)
+  Possible Paths (evaluating from current combination):
+    Path 0: NO NEG DOT PRODUCT
+    Path 1: AVAILABLE
+    Path 2: AVAILABLE
+    Path 3: NO NEG DOT PRODUCT
+    Taking path 2. New Combination: (0, 0, 1, 1)
+      New Frozen States for next level: (F, F, F, F)
+    Taking path 1. New Combination: (0, 1, 0, 1)
+      New Frozen States for next level: (F, F, T, F)
+
+--- Level 2 ---
+Current Combination: (1, 1, 0, 0)
+  Frozen States (from parent pair): (F, F, T, T)
+  Possible Paths (evaluating from current combination):
+    Path 0: AVAILABLE
+    Path 1: NO NEG DOT PRODUCT
+    Path 2: FROZEN (from parent)
+    Path 3: FROZEN (from parent)
+    Taking path 0. New Combination: (2, 1, 0, 0)
+      New Frozen States for next level: (F, F, T, T)
+Current Combination: (0, 1, 1, 0)
+  Frozen States (from parent pair): (F, F, F, T)
+  Possible Paths (evaluating from current combination):
+    Path 0: AVAILABLE
+    Path 1: NO NEG DOT PRODUCT
+    Path 2: NO NEG DOT PRODUCT
+    Path 3: FROZEN (from parent)
+    Taking path 0. New Combination: (1, 1, 1, 0)
+      New Frozen States for next level: (F, F, F, T)
+Current Combination: (0, 0, 1, 1)
+  Frozen States (from parent pair): (F, F, F, F)
+  Possible Paths (evaluating from current combination):
+    Path 0: NO NEG DOT PRODUCT
+    Path 1: AVAILABLE
+    Path 2: NO NEG DOT PRODUCT
+    Path 3: NO NEG DOT PRODUCT
+    Taking path 1. New Combination: (0, 1, 1, 1)
+      New Frozen States for next level: (F, F, F, F)
+Current Combination: (0, 1, 0, 1)
+  Frozen States (from parent pair): (F, F, T, F)
+  Possible Paths (evaluating from current combination):
+    Path 0: NO NEG DOT PRODUCT
+    Path 1: NO NEG DOT PRODUCT
+    Path 2: FROZEN (from parent)
+    Path 3: NO NEG DOT PRODUCT
+
+--- Level 3 ---
+Current Combination: (2, 1, 0, 0)
+  Frozen States (from parent pair): (F, F, T, T)
+  Possible Paths (evaluating from current combination):
+    Path 0: NO NEG DOT PRODUCT
+    Path 1: NO NEG DOT PRODUCT
+    Path 2: FROZEN (from parent)
+    Path 3: FROZEN (from parent)
+Current Combination: (1, 1, 1, 0)
+  Frozen States (from parent pair): (F, F, F, T)
+  Possible Paths (evaluating from current combination):
+    Path 0: AVAILABLE
+    Path 1: NO NEG DOT PRODUCT
+    Path 2: NO NEG DOT PRODUCT
+    Path 3: FROZEN (from parent)
+    Taking path 0. New Combination: (2, 1, 1, 0)
+      New Frozen States for next level: (F, F, F, T)
+Current Combination: (0, 1, 1, 1)
+  Frozen States (from parent pair): (F, F, F, F)
+  --> Added to Hilbert Basis.
+
+--- Level 4 ---
+Current Combination: (2, 1, 1, 0)
+  Frozen States (from parent pair): (F, F, F, T)
+  Possible Paths (evaluating from current combination):
+    Path 0: NO NEG DOT PRODUCT
+    Path 1: AVAILABLE
+    Path 2: NO NEG DOT PRODUCT
+    Path 3: FROZEN (from parent)
+    Taking path 1. New Combination: (2, 2, 1, 0)
+      New Frozen States for next level: (F, F, F, T)
+
+--- Level 5 ---
+Current Combination: (2, 2, 1, 0)
+  Frozen States (from parent pair): (F, F, F, T)
+  Possible Paths (evaluating from current combination):
+    Path 0: AVAILABLE
+    Path 1: NO NEG DOT PRODUCT
+    Path 2: NO NEG DOT PRODUCT
+    Path 3: FROZEN (from parent)
+    Taking path 0. New Combination: (3, 2, 1, 0)
+      New Frozen States for next level: (F, F, F, T)
+
+--- Level 6 ---
+Current Combination: (3, 2, 1, 0)
+  Frozen States (from parent pair): (F, F, F, T)
+  Possible Paths (evaluating from current combination):
+    Path 0: AVAILABLE
+    Path 1: NO NEG DOT PRODUCT
+    Path 2: NO NEG DOT PRODUCT
+    Path 3: FROZEN (from parent)
+    Taking path 0. New Combination: (4, 2, 1, 0)
+      New Frozen States for next level: (F, F, F, T)
+
+--- Level 7 ---
+Current Combination: (4, 2, 1, 0)
+  Frozen States (from parent pair): (F, F, F, T)
+  --> Added to Hilbert Basis.
+
+--- No more vectors to process. Algorithm finished. ---
+
+Hilbert Basis:
+(0, 1, 1, 1)
+(4, 2, 1, 0)
+
+Execution time: 473 microseconds (0.473 milliseconds)
+
+David's Algorithm
+To make project3 executable: clang++ -std=c++11 -o hilbert3 project3.cxx
+To run project3 executable: ./hilbert3

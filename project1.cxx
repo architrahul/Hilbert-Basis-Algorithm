@@ -147,11 +147,6 @@ public:
                             std::cout << " (added)";
 #endif
                         }
-#if DEBUG
-                        else {
-                            std::cout << " (skipped - already seen or dominated)";
-                        }
-#endif
                     }
                 }
 #if DEBUG
