@@ -1,0 +1,5 @@
+Usage:
+
+python monomers_to_normaliz.py
+../normaliz --verbose -N eqs
+python normaliz_to_monomers.py

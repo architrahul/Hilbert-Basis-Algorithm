@@ -1,265 +1,126 @@
 #include <vector>
-#include <unordered_set>
-#include <algorithm>
-#include <iostream>
-#include <chrono>
 #include <numeric>
-#include <set>
+#include <iostream>
+#include <stdexcept>
+#include <algorithm>
 
-// Type definitions for clarity
-using Monomer = std::vector<int>;        // Vector of binding sites
-using Polymer = std::vector<int>;        // Vector of monomer counts
-
-// Hash function for polymers
-struct PolymerHash {
-    size_t operator()(const Polymer& p) const {
-        size_t hash = p.size();
-        for (auto& i : p) {
-            hash ^= i + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        }
-        return hash;
-    }
-};
-
-class UnsplittablePolymers {
-private:
-    std::vector<Monomer> monomers;   // List of monomer types (binding site vectors)
-    int numMonomers;                // Number of monomer types
-    int numBindingSites;            // Number of binding site types
-
-    // Calculate B(p) - the net binding site vector for polymer p
-    std::vector<int> calculateNetBinding(const Polymer& p) {
-        std::vector<int> result(numBindingSites, 0);
-        
-        // Sum the binding site vectors of all monomers
-        for (int i = 0; i < numMonomers; i++) {
-            if (p[i] > 0) {
-                for (int j = 0; j < numBindingSites; j++) {
-                    result[j] += p[i] * monomers[i][j];
-                }
-            }
-        }
-        return result;
-    }
-    
-    // Check if two polymers are complementary
-    bool areComplementary(const Polymer& p1, const Polymer& p2) {
-        auto bp1 = calculateNetBinding(p1);
-        auto bp2 = calculateNetBinding(p2);
-        
-        for (int i = 0; i < numBindingSites; i++) {
-            if (bp1[i] * bp2[i] < 0) {
-                return true;  // Found a complementary binding site
-            }
-        }
-        return false;
-    }
-    
-    // Add two polymers
-    Polymer addPolymers(const Polymer& p1, const Polymer& p2) {
-        Polymer result(numMonomers);
-        for (int i = 0; i < numMonomers; i++) {
-            result[i] = p1[i] + p2[i];
-        }
-        return result;
-    }
-    
-    // Check if a polymer is splittable
-    bool isSplittable(const Polymer& p) {
-        // Generate all possible sub-multisets of p
-        return generateAndCheckSubsets(p, Polymer(numMonomers, 0), 0);
-    }
-    
-    // Recursive helper to generate all sub-multisets and check if any makes p splittable
-    bool generateAndCheckSubsets(const Polymer& p, Polymer current, int index) {
-        if (index == numMonomers) {
-            // Check if current is a proper subset (not empty and not p itself)
-            bool isProper = false;
-            bool isNotEmpty = false;
-            
-            for (int i = 0; i < numMonomers; i++) {
-                if (current[i] < p[i]) isProper = true;
-                if (current[i] > 0) isNotEmpty = true;
-            }
-            
-            if (isProper && isNotEmpty) {
-                // Calculate p - current
-                Polymer complement(numMonomers);
-                for (int i = 0; i < numMonomers; i++) {
-                    complement[i] = p[i] - current[i];
-                }
-                
-                // If current and complement are not complementary, p is splittable
-                if (!areComplementary(current, complement)) {
-                    return true;  // Found a way to split p
-                }
-            }
-            return false;
-        }
-        
-        // Try all possible counts for this monomer type (0 to p[index])
-        for (int count = 0; count <= p[index]; count++) {
-            current[index] = count;
-            if (generateAndCheckSubsets(p, current, index + 1)) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    // Print a polymer
-    void printPolymer(const Polymer& p) {
-        std::cout << "(";
-        for (int i = 0; i < numMonomers; i++) {
-            std::cout << p[i];
-            if (i < numMonomers - 1) std::cout << ", ";
-        }
-        std::cout << ")";
-    }
-
+#define MAX_NORM 100
+class naiveAlgorithm {
 public:
-    UnsplittablePolymers(const std::vector<Monomer>& m) 
-        : monomers(m), numMonomers(m.size()), numBindingSites(m[0].size()) {}
-    
-    std::vector<Polymer> enumerate() {
-        std::vector<Polymer> unsplittable;
-        
-        // Start with single monomers (trivially unsplittable)
-        for (int i = 0; i < numMonomers; i++) {
-            Polymer p(numMonomers, 0);
-            p[i] = 1;
-            unsplittable.push_back(p);
-            std::cout << "Added single monomer: ";
-            printPolymer(p);
-            std::cout << std::endl;
+    static std::vector<int> calculateWeights(std::vector<int> v) {
+        int n = v.size();
+        if (n == 0) {
+            return {};
         }
-        
-        // Iterate through the list, trying to merge polymers
-        int i = 0;
-        while (i < unsplittable.size()) {
-            std::cout << "Processing polymer " << i << ": ";
-            printPolymer(unsplittable[i]);
-            std::cout << std::endl;
-            
-            for (int j = 0; j <= i; j++) {
-                if (areComplementary(unsplittable[i], unsplittable[j])) {
-                    // Create merged polymer
-                    Polymer merged = addPolymers(unsplittable[i], unsplittable[j]);
-                    
-                    // Check if it's unsplittable
-                    if (!isSplittable(merged)) {
-                        // Check if we've already found this polymer
-                        bool found = false;
-                        for (const auto& p : unsplittable) {
-                            if (p == merged) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        
-                        if (!found) {
-                            unsplittable.push_back(merged);
-                            std::cout << "Found new unsplittable: ";
-                            printPolymer(merged);
-                            std::cout << " (from ";
-                            printPolymer(unsplittable[i]);
-                            std::cout << " + ";
-                            printPolymer(unsplittable[j]);
-                            std::cout << ")" << std::endl;
-                        }
-                    }
-                }
-            }
-            
-            i++;
-            if (i % 10 == 0) {
-                std::cout << "Progress: " << i << " / " << unsplittable.size() 
-                          << " polymers processed" << std::endl;
-            }
+
+        std::vector<int> weights(n);
+        weights[n - 1] = 1;
+
+        for (int i = n - 2; i >= 0; i--) {
+            weights[i] = weights[i + 1] * ((v[i + 1]) + 1);
         }
-        
-        return unsplittable;
+        return weights;
     }
-    
-    // Improved version with optimizations
-    std::vector<Polymer> enumerateEfficient() {
-        std::vector<Polymer> unsplittable;
-        std::unordered_set<Polymer, PolymerHash> unsplittableSet;
-        
-        // Start with single monomers
-        for (int i = 0; i < numMonomers; i++) {
-            Polymer p(numMonomers, 0);
-            p[i] = 1;
-            unsplittable.push_back(p);
-            unsplittableSet.insert(p);
+
+    static int vectorToInteger(std::vector<int> v, std::vector<int> weights) {
+        if (v.empty()) return 0;
+
+        int intValue = 0;
+        for (size_t i = 0; i < v.size(); i++) {
+            intValue += v[i] * weights[i];
         }
-        
-        int i = 0;
-        int maxSize = 5; // Limit the size of polymers for efficiency
-        
-        while (i < unsplittable.size()) {
-            int totalMonomers = std::accumulate(unsplittable[i].begin(), unsplittable[i].end(), 0);
-            if (totalMonomers >= maxSize) {
-                i++;
-                continue; // Skip large polymers
+        return intValue;
+    }
+
+    static std::vector<int> integerToVector(int intValue, std::vector<int> weights) {
+        std::vector<int> v(weights.size());
+        int remainingValue = intValue;
+
+        for (int i = 0; i < weights.size(); ++i) {
+            if (weights[i] <= 0) {
+                throw std::invalid_argument("Invalid weight (must be positive) at index " + std::to_string(i) + " during integer to vector conversion.");
             }
-            
-            for (int j = 0; j <= i; j++) {
-                int j_size = std::accumulate(unsplittable[j].begin(), unsplittable[j].end(), 0);
-                
-                // Skip if combined size would exceed limit
-                if (totalMonomers + j_size > maxSize) continue;
-                
-                if (areComplementary(unsplittable[i], unsplittable[j])) {
-                    Polymer merged = addPolymers(unsplittable[i], unsplittable[j]);
-                    
-                    if (!isSplittable(merged) && unsplittableSet.find(merged) == unsplittableSet.end()) {
-                        unsplittable.push_back(merged);
-                        unsplittableSet.insert(merged);
-                    }
-                }
-            }
-            
-            i++;
-            if (i % 100 == 0) {
-                std::cout << "Progress: " << i << " / " << unsplittable.size() << std::endl;
+            v[i] = static_cast<int>(remainingValue / weights[i]);
+            remainingValue %= weights[i];
+        }
+
+        if (remainingValue != 0) {
+            throw std::overflow_error("Remainder is non-zero.");
+        }
+
+        return v;
+    }
+
+    static std::vector<int> coeffToVector(std::vector<std::vector<int>> monomers, std::vector<int> coeff) {
+        int size = coeff.size();
+        std::vector<int> actualVector(monomers[0].size(), 0);
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < actualVector.size(); j++) {
+                actualVector[j] += coeff[i] * monomers[i][j];
             }
         }
-        
-        return unsplittable;
+        return actualVector;
+    }
+
+    static bool isComplementary(std::vector<int> v1, std::vector<int> v2) {
+        if (v1.size() != v2.size()) {
+            throw std::invalid_argument("Vectors must be of the same size for complement check.");
+        }
+        for (size_t i = 0; i < v1.size(); ++i) {
+            if (v1[i]*v2[i] < 0) return true;
+        }
+        return false;
+    }
+
+    static bool isUnsplittable (std::vector<int> v, std::vector<std::vector<int>> monomers) {
+        std::vector<int> weights = calculateWeights(v);
+        int intValue = vectorToInteger(v, weights);
+        int halfValue = intValue / 2;
+        for (int  i = 0; i < halfValue; i++) {
+            int iComplement = intValue - i;
+            std::vector<int> iVectorCoeff = integerToVector(i, weights);
+            std::vector<int> iComplementVectorCoeff = integerToVector(iComplement, weights);
+            std::vector<int> iVector = coeffToVector(monomers, iVectorCoeff);
+            std::vector<int> iComplementVector = coeffToVector(monomers, iComplementVectorCoeff);
+            if (!isComplementary(iVector, iComplementVector)) {
+                return false; // Found a uncomplementary pair
+            }
+        }
+        return true;
+    }
+
+    static std::vector<int> vectorAdd (std::vector<int> v1, std::vector<int> v2) {
+        std::vector<int> result(v1.size());
+        for (size_t i = 0; i < v1.size(); ++i) {
+            result[i] = v1[i] + v2[i];
+        }
+        return result;
     }
 };
 
 int main() {
-    // Example: Define some monomers with binding sites
-    // Monomer 1: {1 a, 0 b, 0 c}
-    // Monomer 2: {0 a, 1 b, 0 c}
-    // Monomer 3: {-1 a, 0 b, 1 c}
-    std::vector<Monomer> monomers = {
-        {-1, -1}, {1, 3}, {2, -2}, {-3, -1}
-    };
-    
-    auto start = std::chrono::high_resolution_clock::now();
-    
-    UnsplittablePolymers solver(monomers);
-    std::vector<Polymer> result = solver.enumerateEfficient();
-    
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    
-    std::cout << "\nUnsplittable Polymers:" << std::endl;
-    for (const auto& p : result) {
-        std::cout << "(";
-        for (int i = 0; i < p.size(); i++) {
-            std::cout << p[i];
-            if (i < p.size() - 1) std::cout << ", ";
-        }
-        std::cout << ")" << std::endl;
+    std::vector<std::vector<int>> monomers = {{-1, -1}, {1, 3}, {2, -2}, {-3, -1}};
+    std::vector<std::vector<int>> basis;
+    basis.reserve(monomers.size());
+
+    std::vector<std::vector<int>> S;
+    for (int i = 0; i < monomers.size(); i++) {
+        std::vector<int> unitVector(monomers.size(), 0);
+        unitVector[i] = 1;
+
+        S.push_back(unitVector);
     }
     
-    std::cout << "\nTotal unsplittable polymers found: " << result.size() << std::endl;
-    std::cout << "Execution time: " << duration.count() << " milliseconds" << std::endl;
-    
-    return 0;
+    int i = 1;
+    while (i < S.size()) {
+        for (int j = 0; j < i; j++) {
+            if(naiveAlgorithm::isComplementary(S[i], S[j])) {
+                std::vector<int> p = naiveAlgorithm::vectorAdd(S[i], S[j]);
+                if (naiveAlgorithm::isUnsplittable(p, monomers) && (std::accumulate(p.begin(), p.end(), 0) < MAX_NORM)) {
+                    S.push_back(p);
+                }
+            }
+        }
+        i++;
+    }
 }
