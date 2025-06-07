@@ -62,10 +62,12 @@ public:
         return actualVector;
     }
 
-    static bool isComplementary(std::vector<int> v1, std::vector<int> v2) {
-        if (v1.size() != v2.size()) {
+    static bool isComplementary(std::vector<std::vector<int>> monomers, std::vector<int> coeff1, std::vector<int> coeff2) {
+        if (coeff1.size() != coeff2.size()) {
             throw std::invalid_argument("Vectors must be of the same size for complement check.");
         }
+        std::vector<int> v1 = coeffToVector(monomers, coeff1);
+        std::vector<int> v2 = coeffToVector(monomers, coeff2);
         for (size_t i = 0; i < v1.size(); ++i) {
             if (v1[i]*v2[i] < 0) return true;
         }
@@ -76,13 +78,13 @@ public:
         std::vector<int> weights = calculateWeights(v);
         int intValue = vectorToInteger(v, weights);
         int halfValue = intValue / 2;
-        for (int  i = 0; i < halfValue; i++) {
+        for (int  i = 1; i < halfValue; i++) {
             int iComplement = intValue - i;
             std::vector<int> iVectorCoeff = integerToVector(i, weights);
             std::vector<int> iComplementVectorCoeff = integerToVector(iComplement, weights);
             std::vector<int> iVector = coeffToVector(monomers, iVectorCoeff);
             std::vector<int> iComplementVector = coeffToVector(monomers, iComplementVectorCoeff);
-            if (!isComplementary(iVector, iComplementVector)) {
+            if (!isComplementary(monomers, iVector, iComplementVector)) {
                 return false; // Found a uncomplementary pair
             }
         }
@@ -114,7 +116,7 @@ int main() {
     int i = 1;
     while (i < S.size()) {
         for (int j = 0; j < i; j++) {
-            if(naiveAlgorithm::isComplementary(S[i], S[j])) {
+            if(naiveAlgorithm::isComplementary(monomers, S[i], S[j])) {
                 std::vector<int> p = naiveAlgorithm::vectorAdd(S[i], S[j]);
                 if (naiveAlgorithm::isUnsplittable(p, monomers) && (std::accumulate(p.begin(), p.end(), 0) < MAX_NORM)) {
                     S.push_back(p);
@@ -122,5 +124,15 @@ int main() {
             }
         }
         i++;
+    }
+
+    // Print S
+    for (const auto& solution : S) {
+        std::cout << "(";
+        for (size_t i = 0; i < solution.size(); i++) {
+            std::cout << solution[i];
+            if (i < solution.size() - 1) std::cout << ", ";
+        }
+        std::cout << ")" << std::endl;
     }
 }
