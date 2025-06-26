@@ -140,7 +140,7 @@ int main() {
         for (int j = 0; j < i; j++) {
             if(naiveAlgorithm::isComplementary(monomers, S[i], S[j])) {
                 std::vector<int> p = naiveAlgorithm::vectorAdd(S[i], S[j]);
-                if (naiveAlgorithm::isUnsplittable(p, monomers) && (std::accumulate(p.begin(), p.end(), 0) < MAX_NORM)) {
+                if ((std::accumulate(p.begin(), p.end(), 0) <= MAX_NORM) && naiveAlgorithm::isUnsplittable(p, monomers)) {
                     S.push_back(p);
                 }
             }
@@ -158,3 +158,4 @@ int main() {
         std::cout << ")" << std::endl;
     }
 }
+

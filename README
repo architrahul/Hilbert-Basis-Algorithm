@@ -152,3 +152,7 @@ Execution time: 473 microseconds (0.473 milliseconds)
 David's Algorithm
 To make project3 executable: clang++ -std=c++11 -o hilbert3 project3.cxx
 To run project3 executable: ./hilbert3
+
+
+TO DO: Add a parser
+Make naive algorithm working

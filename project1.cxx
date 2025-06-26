@@ -79,7 +79,7 @@ public:
         }
 
         int levelCount = 0;
-        while (!currentLevel.empty() && levelCount++ < 15) {
+        while (!currentLevel.empty() && levelCount++ < 18) {
             std::vector<std::vector<int>> nextLevel;
             nextLevel.reserve(currentLevel.size() * numEquations);
 
@@ -155,13 +155,13 @@ public:
 #endif
             }
 
-#if DEBUG
+
             std::cout << "\nLevel " << levelCount << " Summary:" << std::endl;
             std::cout << "Current Level Size: " << currentLevel.size() << std::endl;
             std::cout << "Next Level Size: " << nextLevel.size() << std::endl;
             std::cout << "Current Basis Size: " << basis.size() << std::endl;
             std::cout << "------------------------" << std::endl;
-#endif
+
 
             currentLevel = std::move(nextLevel);
         }

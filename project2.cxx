@@ -10,7 +10,7 @@
 
 // Set to 1 to enable debug output, 0 to disable
 #define DEBUG 0
-#define level_limit 17
+#define level_limit 18
 
 class HilbertBasis {
 private:
@@ -75,7 +75,7 @@ public:
         
         int levelCount = 1;
         
-        while (!currentLevelPairs.empty() && levelCount < level_limit) {
+        while (!currentLevelPairs.empty() && levelCount <= level_limit) {
             std::vector<std::pair<std::vector<int>, std::vector<bool>>> nextLevelPairs;
             nextLevelPairs.reserve(currentLevelPairs.size() * numEquations);
     
