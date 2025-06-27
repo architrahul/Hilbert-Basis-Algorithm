@@ -131,25 +131,38 @@ public:
         return true; // a == b
     }
 
-    static bool isUnsplittable (std::vector<int> v, std::vector<std::vector<int>> monomers) {
+    static void printVector(const std::vector<int>& v) {
+        std::cout << "(";
+        for (size_t i = 0; i < v.size(); ++i) {
+            std::cout << v[i];
+            if (i < v.size() - 1) std::cout << ", ";
+        }
+        std::cout << ")" << std::endl;
+    }
+
+    static bool isUnsplittable(std::vector<int> v, std::vector<std::vector<int>> monomers) {
         int N = v.size();
         std::vector<int> b(N, 0);
-
+    
         while (true) {
-            // Compute c = a - b
-            std::vector<int> c(N);
-            c = vectorSub(v, b);
-
-            // Only do if b is lex ≤ c
-            if (is_lex_leq(b, c)) {
-                std::vector<int> iVector = coeffToVector(monomers, b);
-                std::vector<int> iComplementVector = coeffToVector(monomers, c);
-                if (!isComplementary(monomers, iVector, iComplementVector)) {
-                    std::cout << "Found uncomplementary pair. Polymer is splittable." << std::endl;
-                    return false; // Found a uncomplementary pair
+            // Skip the iteration if b is a null vector
+            if (!(std::all_of(b.begin(), b.end(), [](int x) { return x == 0; }))) {
+                // Compute c = a - b
+                std::vector<int> c(N);
+                c = vectorSub(v, b);
+    
+                // Only do if b is lex ≤ c
+                if (is_lex_leq(b, c)) {
+                    std::vector<int> iVector = coeffToVector(monomers, b);
+                    std::vector<int> iComplementVector = coeffToVector(monomers, c);
+                    if (!isComplementary(monomers, iVector, iComplementVector)) {
+                        std::cout << "Found uncomplementary pair. Polymer is splittable." << std::endl;
+                        return false; // Found a uncomplementary pair
+                    }
                 }
             }
-
+    
+            // Update b
             int i = N - 1;
             while (i >= 0) {
                 b[i]++;
