@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <chrono>
+#include <set>
 
 #define MAX_NORM 100
 #define DEBUG 0
@@ -191,36 +192,29 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::vector<std::vector<int>> basis;
-    basis.reserve(monomers.size());
-
-    std::vector<std::vector<int>> S;
+    std::set<std::vector<int>> S;
     for (int i = 0; i < monomers.size(); i++) {
         std::vector<int> unitVector(monomers.size(), 0);
         unitVector[i] = 1;
 
-        S.push_back(unitVector);
+        S.insert(unitVector);
     }
 
     // Start timing
     auto start = std::chrono::high_resolution_clock::now();
 
-    int i = 1;
-    while (i < S.size()) {
-        for (int j = 0; j < i; j++) {
-            if (naiveAlgorithm::isComplementary(monomers, S[i], S[j])) {
-                std::vector<int> p = naiveAlgorithm::vectorAdd(S[i], S[j]);
-                if ((std::accumulate(p.begin(), p.end(), 0) <= MAX_NORM) && naiveAlgorithm::isUnsplittable(p, monomers)) {
-                    if (DEBUG) {
-                        std::cout << "Adding polymer to S: ";
-                        naiveAlgorithm::printVector(p);
-                        std::cout << std::endl;
-                    }
-                    S.push_back(p);
+    for (auto it1 = S.begin(); it1 != S.end(); ++it1) {
+        for (auto it2 = S.begin(); it2 != it1; ++it2) {
+            std::vector<int> p = naiveAlgorithm::vectorAdd(*it1, *it2);
+            if ((std::accumulate(p.begin(), p.end(), 0) <= MAX_NORM) && naiveAlgorithm::isUnsplittable(p, monomers)) {
+                if (DEBUG) {
+                    std::cout << "Adding polymer to S: ";
+                    naiveAlgorithm::printVector(p);
+                    std::cout << std::endl;
                 }
+                S.insert(p);
             }
         }
-        i++;
     }
 
     // End timing
