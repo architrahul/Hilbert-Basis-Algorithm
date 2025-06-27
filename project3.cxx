@@ -5,8 +5,10 @@
 #include <algorithm>
 #include <fstream>
 #include <sstream>
+#include <chrono>
 
 #define MAX_NORM 100
+#define DEBUG 0
 class naiveAlgorithm {
 public:
     static std::vector<std::vector<int>> parseMonomersFile(const std::string& filename) {
@@ -71,15 +73,28 @@ public:
     }
     
     static void printVector(const std::vector<int>& v) {
-        std::cout << "(";
-        for (size_t i = 0; i < v.size(); ++i) {
-            std::cout << v[i];
-            if (i < v.size() - 1) std::cout << ", ";
+        if (DEBUG) {
+            std::cout << "(";
+            for (size_t i = 0; i < v.size(); ++i) {
+                std::cout << v[i];
+                if (i < v.size() - 1) std::cout << ", ";
+            }
+            std::cout << ")" << std::endl;
         }
-        std::cout << ")" << std::endl;
     }
     
     static std::vector<int> coeffToVector(std::vector<std::vector<int>> monomers, std::vector<int> coeff) {
+        if (monomers.size() != coeff.size()) {
+            std::cout << "Monomers size: " << monomers.size() << ", Coefficients size: " << coeff.size() << std::endl;
+            std::cout << "Monomers: ";
+            for (const auto& monomer : monomers) {
+                printVector(monomer);
+            }
+            std::cout << "Coefficients: ";
+            printVector(coeff);
+            throw std::invalid_argument("Monomers and coefficients must be of the same size.");
+        }
+
         int size = coeff.size();
         std::vector<int> actualVector(monomers[0].size(), 0);
         for (int i = 0; i < size; i++) {
@@ -109,9 +124,15 @@ public:
         int N = v.size();
         std::vector<int> b(N, 0);
 
+        if (v.size() != monomers.size()) {
+            throw std::invalid_argument("Input vector size does not match monomers size.");
+        }
+
         // print the input vector
-        std::cout << "Input vector v: ";
-        printVector(v);
+        if (DEBUG) {
+            std::cout << "Checking unsplittability for vector: ";
+            printVector(v);
+        }
     
         while (true) {
             // Skip the iteration if b is a null vector
@@ -124,12 +145,15 @@ public:
                 if (is_lex_leq(b, c)) {
                     std::vector<int> iVector = coeffToVector(monomers, b);
                     std::vector<int> iComplementVector = coeffToVector(monomers, c);
-                    if (!isComplementary(monomers, iVector, iComplementVector)) {
-                        std::cout << "Found uncomplementary pair. Polymer is splittable." << std::endl;
-                        std::cout << "b: ";
-                        printVector(b);
-                        std::cout << "c: ";
-                        printVector(c);
+                    if (!isComplementary(monomers, b, c)) {
+                        if (DEBUG) {
+                            std::cout << "Found uncomplementary pair. Polymer is splittable." << std::endl;
+                            std::cout << "b: ";
+                            printVector(b);
+                            std::cout << "c: ";
+                            printVector(c);
+                        }
+                        
                         return false; // Found a uncomplementary pair
                     }
                 }
@@ -145,7 +169,9 @@ public:
             }
             if (i < 0) break; // Done
         }
+        if (DEBUG) {
         std::cout << "Polymer is unsplittable." << std::endl;
+        }
         return true;
     }
 };
@@ -176,23 +202,30 @@ int main(int argc, char* argv[]) {
         S.push_back(unitVector);
     }
 
+    // Start timing
+    auto start = std::chrono::high_resolution_clock::now();
+
     int i = 1;
     while (i < S.size()) {
         for (int j = 0; j < i; j++) {
             if (naiveAlgorithm::isComplementary(monomers, S[i], S[j])) {
                 std::vector<int> p = naiveAlgorithm::vectorAdd(S[i], S[j]);
                 if ((std::accumulate(p.begin(), p.end(), 0) <= MAX_NORM) && naiveAlgorithm::isUnsplittable(p, monomers)) {
-                    std::cout << "Adding polymer to S: ";
-                    for (size_t k = 0; k < p.size(); ++k) {
-                        std::cout << p[k] << " ";
+                    if (DEBUG) {
+                        std::cout << "Adding polymer to S: ";
+                        naiveAlgorithm::printVector(p);
+                        std::cout << std::endl;
                     }
-                    std::cout << std::endl;
                     S.push_back(p);
                 }
             }
         }
         i++;
     }
+
+    // End timing
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
     // Print S
     std::cout << "Final set of unsplittable polymers (S):" << std::endl;
@@ -204,6 +237,10 @@ int main(int argc, char* argv[]) {
         }
         std::cout << ")" << std::endl;
     }
+
+    // Print execution time
+    std::cout << "\nExecution time: " << duration.count() << " microseconds";
+    std::cout << " (" << duration.count() / 1000.0 << " milliseconds)" << std::endl;
 
     return 0;
 }
