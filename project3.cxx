@@ -6,7 +6,7 @@
 #include <fstream>
 #include <sstream>
 
-#define MAX_NORM 3
+#define MAX_NORM 100
 class naiveAlgorithm {
 public:
     static std::vector<std::vector<int>> parseMonomersFile(const std::string& filename) {
@@ -45,84 +45,23 @@ public:
         return monomers;
     }
 
-    static std::vector<int> coeffToVector(std::vector<std::vector<int>> monomers, std::vector<int> coeff) {
-        int size = coeff.size();
-        if (size != monomers.size()) {
-            std::cerr << "Error: Coefficient size (" << size << ") does not match monomer size (" << monomers.size() << ")." << std::endl;
-            std::cerr << "Coefficient vector: ";
-            for (size_t i = 0; i < coeff.size(); ++i) {
-                std::cerr << coeff[i] << " ";
-            }
-            std::cerr << std::endl;
     
-            std::cerr << "Monomers vectors:" << std::endl;
-            for (size_t i = 0; i < monomers.size(); ++i) {
-                std::cerr << "Monomer " << i << ": ";
-                for (size_t j = 0; j < monomers[i].size(); ++j) {
-                    std::cerr << monomers[i][j] << " ";
-                }
-                std::cerr << std::endl;
-            }
-    
-            throw std::invalid_argument("Coefficient size does not match monomer size.");
-        }
-
-        std::vector<int> actualVector(monomers.size(), 0);
-        for (int i = 0; i < size; i++) {
-            for (int j = 0; j < actualVector.size(); j++) {
-                actualVector[j] += coeff[i] * monomers[i][j];
-            }
-        }
-        std::cout << "Converted coefficients to vector: ";
-        for (size_t i = 0; i < actualVector.size(); ++i) {
-            std::cout << actualVector[i] << " ";
-        }
-        std::cout << std::endl;
-        return actualVector;
-    }
-
-    static bool isComplementary(std::vector<std::vector<int>> monomers, std::vector<int> coeff1, std::vector<int> coeff2) {
-        if (coeff1.size() != coeff2.size()) {
-            throw std::invalid_argument("Vectors must be of the same size for complement check.");
-        }
-        std::vector<int> v1 = coeffToVector(monomers, coeff1);
-        std::vector<int> v2 = coeffToVector(monomers, coeff2);
-        for (size_t i = 0; i < v1.size(); ++i) {
-            if (v1[i]*v2[i] < 0) {
-                std::cout << "Vectors are complementary." << std::endl;
-                return true;
-            }
-        }
-        std::cout << "Vectors are not complementary." << std::endl;
-        return false;
-    }
-
     static std::vector<int> vectorAdd (std::vector<int> v1, std::vector<int> v2) {
         std::vector<int> result(v1.size());
         for (size_t i = 0; i < v1.size(); ++i) {
             result[i] = v1[i] + v2[i];
         }
-        std::cout << "Added vectors: ";
-        for (size_t i = 0; i < result.size(); ++i) {
-            std::cout << result[i] << " ";
-        }
-        std::cout << std::endl;
         return result;
     }
-
+    
     static std::vector<int> vectorSub (std::vector<int> v1, std::vector<int> v2) {
         std::vector<int> result(v1.size());
         for (size_t i = 0; i < v1.size(); ++i) {
             result[i] = v1[i] - v2[i];
         }
-        std::cout << "Subtracted vectors: ";
-        for (size_t i = 0; i < result.size(); ++i) {
-            std::cout << result[i] << " ";
-        }
-        std::cout << std::endl;
         return result;
     }
-
+    
     static bool is_lex_leq(std::vector<int> a, std::vector<int> b) {
         for (size_t i = 0; i < a.size(); ++i) {
             if (a[i] < b[i]) return true;
@@ -130,7 +69,7 @@ public:
         }
         return true; // a == b
     }
-
+    
     static void printVector(const std::vector<int>& v) {
         std::cout << "(";
         for (size_t i = 0; i < v.size(); ++i) {
@@ -139,10 +78,40 @@ public:
         }
         std::cout << ")" << std::endl;
     }
+    
+    static std::vector<int> coeffToVector(std::vector<std::vector<int>> monomers, std::vector<int> coeff) {
+        int size = coeff.size();
+        std::vector<int> actualVector(monomers[0].size(), 0);
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < actualVector.size(); j++) {
+                actualVector[j] += coeff[i] * monomers[i][j];
+            }
+        }
+        return actualVector;
+    }
+    
+    static bool isComplementary(std::vector<std::vector<int>> monomers, std::vector<int> coeff1, std::vector<int> coeff2) {
+        if (coeff1.size() != coeff2.size()) {
+            throw std::invalid_argument("Vectors must be of the same size for complement check.");
+        }
+        // Check if the coefficients are complementary
+        std::vector<int> v1 = coeffToVector(monomers, coeff1);
+        std::vector<int> v2 = coeffToVector(monomers, coeff2);
+        for (size_t i = 0; i < v1.size(); ++i) {
+            if (v1[i]*v2[i] < 0) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     static bool isUnsplittable(std::vector<int> v, std::vector<std::vector<int>> monomers) {
         int N = v.size();
         std::vector<int> b(N, 0);
+
+        // print the input vector
+        std::cout << "Input vector v: ";
+        printVector(v);
     
         while (true) {
             // Skip the iteration if b is a null vector
@@ -157,6 +126,10 @@ public:
                     std::vector<int> iComplementVector = coeffToVector(monomers, c);
                     if (!isComplementary(monomers, iVector, iComplementVector)) {
                         std::cout << "Found uncomplementary pair. Polymer is splittable." << std::endl;
+                        std::cout << "b: ";
+                        printVector(b);
+                        std::cout << "c: ";
+                        printVector(c);
                         return false; // Found a uncomplementary pair
                     }
                 }
@@ -175,7 +148,6 @@ public:
         std::cout << "Polymer is unsplittable." << std::endl;
         return true;
     }
-
 };
 
 int main(int argc, char* argv[]) {
