@@ -156,3 +156,7 @@ To run project3 executable: ./hilbert3
 
 TO DO: Add a parser
 Make naive algorithm working
+
+TO DO
+
+0000010000

@@ -6,30 +6,18 @@
 #include <numeric>
 #include <sstream>
 #include <fstream>
-#include <sstream>
+#include "HelperMethods.hxx"
 
 // Set to 1 to enable debug output, 0 to disable
 #define DEBUG 0
-#define level_limit 18
+#define level_limit 200
+#define mode 1 // 0 for Hilbert Basis, 1 for naive algorithm
 
 class HilbertBasis {
-private:
-    const std::vector<std::vector<int>>& equations;
+public:
+    const std::vector<std::vector<int>>& monomers;
     const int numVars;
-    const int numEquations;
-
-    // Calculate the actual vector by multiplying the combination with equations
-    std::vector<int> calculateActualVector(const std::vector<int>& combination) {
-        std::vector<int> result(numVars, 0);
-        for (int i = 0; i < numEquations; i++) {
-            if (combination[i] != 0) {
-                for (int j = 0; j < numVars; j++) {
-                    result[j] += combination[i] * equations[i][j];
-                }
-            }
-        }
-        return result;
-    }
+    const int nummonomers;
 
     // Check if a vector is a solution vector (all zeros)
     bool isSolutionVector(const std::vector<int>& vec) const {
@@ -53,21 +41,21 @@ private:
 
 public:
     HilbertBasis(const std::vector<std::vector<int>>& eqs) 
-        : equations(eqs), numEquations(eqs.size()), numVars(eqs[0].size()) {}
+        : monomers(eqs), nummonomers(eqs.size()), numVars(eqs[0].size()) {}
 
     std::vector<std::vector<int>> compute() {
         std::vector<std::vector<int>> basis;
         std::vector<std::pair<std::vector<int>, std::vector<bool>>> currentLevelPairs;
         
-        basis.reserve(numEquations);
-        currentLevelPairs.reserve(numEquations);
+        basis.reserve(nummonomers);
+        currentLevelPairs.reserve(nummonomers);
         // Start at level 1 with unit vectors and their initial frozen states
-        for (int i = 0; i < numEquations; i++) {
-            std::vector<int> unitVector(numEquations, 0);
+        for (int i = 0; i < nummonomers; i++) {
+            std::vector<int> unitVector(nummonomers, 0);
             unitVector[i] = 1;
 
-            std::vector<bool> initialFrozenStatus(numEquations, false);
-            for (int j = i + 1; j < numEquations; j++) {
+            std::vector<bool> initialFrozenStatus(nummonomers, false);
+            for (int j = i + 1; j < nummonomers; j++) {
                 initialFrozenStatus[j] = true;
             }
             currentLevelPairs.push_back({unitVector, initialFrozenStatus});
@@ -76,29 +64,47 @@ public:
         int levelCount = 1;
         
         while (!currentLevelPairs.empty() && levelCount <= level_limit) {
+            if (DEBUG) {
+                std::cout << "\nProcessing level " << levelCount << " with " 
+                      << currentLevelPairs.size() << " pairs." << std::endl;
+            }
+            
             std::vector<std::pair<std::vector<int>, std::vector<bool>>> nextLevelPairs;
-            nextLevelPairs.reserve(currentLevelPairs.size() * numEquations);
+            nextLevelPairs.reserve(currentLevelPairs.size() * nummonomers);
     
             for (const auto& currentPair : currentLevelPairs) {
+                if (DEBUG) {
+                    std::cout << "Current combination: ";
+                    for (const auto& val : currentPair.first) {
+                        std::cout << val << " ";
+                    }
+                    std::cout << "\n";
+                }
+                
                 const std::vector<int>& currentCombination = currentPair.first;
                 std::vector<bool> currentFrozenStatus = currentPair.second;
                 
-                auto actualVector = calculateActualVector(currentCombination);
+                auto actualVector = HelperMethods::coeffToVector(monomers, currentCombination);
                 
                 if (isSolutionVector(actualVector)) {
                     basis.push_back(currentCombination);
+                    std::cout << "Added to basis (solution vector): ";
+                    for (const auto& val : currentCombination) {
+                        std::cout << val << " ";
+                    }
+                    std::cout << std::endl;
                     continue;
                 }
                 
                 std::vector<bool> possiblePaths = currentFrozenStatus;
                 int prevPathIdx = -1;
 
-                for (int path_taken_idx = numEquations - 1; path_taken_idx >= 0; path_taken_idx--) {
+                for (int path_taken_idx = nummonomers - 1; path_taken_idx >= 0; path_taken_idx--) {
                     if (currentFrozenStatus[path_taken_idx]) {
                         continue;
                     }
                     
-                    if (hasNegativeDotProduct(equations[path_taken_idx], actualVector)) {
+                    if (hasNegativeDotProduct(monomers[path_taken_idx], actualVector)) {
                         auto newCombination = currentCombination;
                         newCombination[path_taken_idx]++;
                         
@@ -124,35 +130,33 @@ public:
 };
 
 // Example usage
-int main() {
-    std::vector<std::vector<int>> equations = {{2, 2, 2, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 2, 2, 2, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, -1, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, -1, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {-1, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, 0, 0, 0, 0, -1, 2, 2, 2, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, 0, 0, 2, 2, 2, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2},
-    {0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {-1, -1, -1, 0, 0, 0, -1, -1, -1, 0, 0, 0, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+int main(int argc, char* argv[]) {
+    std::vector<std::vector<int>> monomers;
+    int og_monomers_size = 0;
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[0] << " <input_file>" << std::endl;
+        return 1;
+    }
+
+    try {
+        monomers = HelperMethods::parseMonomersFile(argv[1]);
+        if (mode == 1) {
+            og_monomers_size = monomers.size();
+            monomers = HelperMethods::add_unit_monomers(monomers);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+        return 1;
+    }
     
     auto start = std::chrono::high_resolution_clock::now();
 
-    HilbertBasis hb(equations);
+    HilbertBasis hb(monomers);
     std::vector<std::vector<int>> basis = hb.compute();
+    if (mode == 1) {
+        std::cout << "Naive algorithm mode enabled. Removing unit monomers." << std::endl;
+        basis = HelperMethods::remove_unit_monomers(basis, og_monomers_size);
+    }
 
     // End timing
     auto end = std::chrono::high_resolution_clock::now();

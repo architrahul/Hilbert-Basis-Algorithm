@@ -1,0 +1,609 @@
+import os
+import copy
+import time
+import pandas as pd
+import matplotlib.pyplot as plt
+import torch
+from torch.utils.data import Dataset, DataLoader
+import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_sequence
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers.optimization import get_scheduler
+from tqdm import tqdm
+import numpy as np
+from sklearn.metrics import classification_report, roc_auc_score, precision_score, recall_score, f1_score
+from sklearn.model_selection import train_test_split
+from collections import defaultdict, Counter
+from interpretation.interpret_method import interpret_highlighter, interpret_dictionary
+
+INFO_DIR = "/sc/arion/projects/pejaverlab/projects/MIMIC_disease_pred/logs/output_log"
+run_id = str(int(time.time()))
+MAIN_OUTPUT_DIR = os.path.join(INFO_DIR, run_id)
+os.makedirs(MAIN_OUTPUT_DIR, exist_ok=True)
+
+# toggles
+LOAD_SPLITS = True
+LAST_LAYER_ONLY = True
+VALIDATION = True 
+VALIDATION_STOP_FACTOR = "loss" # AUC or loss
+SAVE_MODEL = False
+LOSS_TYPE = "focal_loss" # cross_entropy or focal_loss
+INTERPRET = True
+INTERPRET_ONLY_POSITIVE = True
+INTERPRET_TOP_K_PERCENT = 0.05
+initial_lr = 1e-5
+constant_lr = False
+# constant lr overrides lr_type
+lr_type = "Lindecay" # "Lindecay" or "LRstep" or "LRplateau"
+
+if lr_type.lower() == "lrplateau" and not constant_lr:
+    VALIDATION = True
+
+
+# Config
+MODEL_DIR = "/sc/arion/projects/pejaverlab/lab_resources/huggingface/hub/"
+# Available Local Hugging Face Models:
+# emilyalsentzer/Bio_ClinicalBERT
+# dmis-lab/biobert-base-cased-v1.1
+# michiyasunaga/BioLinkBERT-base
+# bert-base-uncased
+# cambridgeltl/SapBERT-from-PubMedBERT-fulltext
+# microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract
+# allenai/biomed_roberta_base
+# answerdotai/ModernBERT-Large
+# bionlp/bluebert_pubmed_uncased_L-12_H-768_A-12
+# michiyasunaga/BioLinkBERT-large
+
+model_name = "answerdotai/ModernBERT-Large"
+SAVE_DIR = "/sc/arion/projects/pejaverlab/projects/MIMIC_disease_pred/models/final_model"
+SPLIT_DIR = "/sc/arion/projects/pejaverlab/projects/MIMIC_disease_pred/data/processed/rare_disease_notes/pancreatoblastoma/splits"
+DATA_DIR = "/sc/arion/projects/pejaverlab/projects/MIMIC_disease_pred/data/processed/rare_disease_notes/pancreatoblastoma"
+BATCH_SIZE = 16
+MAX_EPOCHS = 30
+LR = initial_lr
+MAX_LEN = 512
+if (model_name.lower() == "answerdotai/ModernBERT-Large"):
+    MAX_LEN = 8192
+STRIDE = MAX_LEN // 2
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+info = []
+info.append("Current Training Config: ")
+info.append(f"LOAD_SPLITS: {LOAD_SPLITS}")
+info.append(f"LAST_LAYER_ONLY: {LAST_LAYER_ONLY}")
+info.append(f"VALIDATION: {VALIDATION}")
+info.append(f"VALIDATION_STOP_FACTOR: {VALIDATION_STOP_FACTOR}")
+info.append(f"SAVE_MODEL: {SAVE_MODEL}")
+info.append(f"LOSS_TYPE: {LOSS_TYPE}")
+info.append(f"INTERPRET: {INTERPRET}")
+info.append(f"INTERPRET_ONLY_POSITIVE: {INTERPRET_ONLY_POSITIVE}")
+info.append(f"INTERPRET_TOP_K_PERCENT: {INTERPRET_TOP_K_PERCENT}")
+info.append(f"initial_lr: {initial_lr}")
+info.append(f"constant_lr: {constant_lr}")
+info.append(f"lr_type: {lr_type}")
+info.append(f"run_id: {run_id}")
+info.append(f"model_name: {model_name}")
+info.append(f"batch_size: {BATCH_SIZE}")
+info.append(f"max_epochs: {MAX_EPOCHS}")
+info.append(f"max_len of a note: {MAX_LEN}")
+info.append(f"stride(overlapping ): {STRIDE}")
+info.append("\n")
+
+
+info.append(" Job started!")
+info.append(f"Working dir: {os.getcwd()}")
+info.append(f"CUDA available: {torch.cuda.is_available()}")
+
+OUTPUT_DIR = os.path.join(MAIN_OUTPUT_DIR)
+
+# prepare the datasets
+if LOAD_SPLITS:
+    print(" Loading pre-split datasets...")
+    train_df = pd.read_csv(os.path.join(SPLIT_DIR, "train.csv"))
+    val_df = pd.read_csv(os.path.join(SPLIT_DIR, "val.csv"))
+    test_df = pd.read_csv(os.path.join(SPLIT_DIR, "test.csv"))
+    if VALIDATION == False:
+        train_bf = pd.concat([train_df, val_df], ignore_index=True)
+else:
+    POS_FILE = os.path.join(DATA_DIR,"positives_grouped.csv")
+    CTRL_FILE = os.path.join(DATA_DIR,"matched_controls_grouped.csv")
+
+    print(" Loading data...")
+    pos_df = pd.read_csv(POS_FILE)
+    pos_df["label"] = 1
+    pos_df = pos_df.rename(columns={"subject_id": "id"})
+
+    ctrl_df = pd.read_csv(CTRL_FILE)
+    ctrl_df["label"] = 0
+    ctrl_df = ctrl_df.rename(columns={"subject_id": "id"})
+
+    # Combine and clean
+    df = pd.concat([pos_df[["id", "text", "label"]], ctrl_df[["id", "text", "label"]]], ignore_index=True)
+    df = df.dropna(subset=["text"]).reset_index(drop=True)
+
+    print(f" Total patients: {len(df)} | Positives: {df.label.sum()} | Negatives: {(df.label == 0).sum()}")
+
+    # Stratified Split
+    train_val_df, test_df = train_test_split(df, test_size=0.2, stratify=df.label, random_state=42)
+    if VALIDATION:
+        train_df, val_df = train_test_split(train_val_df, test_size=1/8, stratify=train_val_df.label, random_state=42)
+    print("datasets loaded: train, val, test (70%, 10%, 20%)")
+
+# Tokenizer
+tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=MODEL_DIR, local_files_only=True)
+
+# Dataset with sliding window
+class ClinicalNotesChunkedDataset(Dataset):
+    def __init__(self, texts, labels, ids, tokenizer, max_length=MAX_LEN, stride=STRIDE):
+        self.samples = []
+        
+        # Calculate a safe character chunk size based on max_length
+        # Use approximate ratio of 3-4 characters per token
+        char_per_token = 4
+        char_chunk_size = int((max_length - 2) * char_per_token)
+        
+        for text, label, pid in zip(texts, labels, ids):
+            # Process text in chunks that won't exceed token limits
+            for i in range(0, len(text), stride):
+                # Get a chunk of text
+                text_chunk = text[i:i + char_chunk_size]
+                
+                if len(text_chunk) == 0:
+                    continue
+                    
+                # Tokenize directly with proper handling of special tokens
+                encoding = tokenizer(
+                    text_chunk,
+                    add_special_tokens=True,
+                    max_length=max_length,
+                    truncation=True,
+                    return_tensors='pt'
+                )
+                
+                self.samples.append({
+                    'input_ids': encoding['input_ids'][0],
+                    'attention_mask': encoding['attention_mask'][0],
+                    'label': torch.tensor(label),
+                    'pid': pid
+                })
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        item = self.samples[idx]
+        return {
+            'input_ids': item['input_ids'],
+            'attention_mask': item['attention_mask'],
+            'labels': item['label'],
+            'pid': item['pid']
+        }
+
+# === Padding collate_fn ===
+def collate_fn(batch):
+    input_ids = [item['input_ids'] for item in batch]
+    attention_mask = [item['attention_mask'] for item in batch]
+    labels = torch.stack([item['labels'] for item in batch])
+    pids = [item['pid'] for item in batch]
+
+    input_ids_padded = pad_sequence(input_ids, batch_first=True, padding_value=tokenizer.pad_token_id)
+    attention_mask_padded = pad_sequence(attention_mask, batch_first=True, padding_value=0)
+
+    return {
+        'input_ids': input_ids_padded,
+        'attention_mask': attention_mask_padded,
+        'labels': labels,
+        'pid': pids
+    }
+
+# Create datasets and loaders
+train_dataset = ClinicalNotesChunkedDataset(train_df.text.tolist(), train_df.label.tolist(), train_df.index.tolist(), tokenizer, MAX_LEN, STRIDE)
+test_dataset = ClinicalNotesChunkedDataset(test_df.text.tolist(), test_df.label.tolist(), test_df.index.tolist(), tokenizer, MAX_LEN, STRIDE)
+if VALIDATION:
+    val_dataset = ClinicalNotesChunkedDataset(val_df.text.tolist(), val_df.label.tolist(), val_df.index.tolist(), tokenizer, MAX_LEN, STRIDE)
+
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
+test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, collate_fn=collate_fn)
+if VALIDATION:
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, collate_fn=collate_fn)
+
+# load model
+model = AutoModelForSequenceClassification.from_pretrained(model_name, cache_dir=MODEL_DIR, num_labels=2, local_files_only=True).to(DEVICE)
+
+def print_trainable_summary(model):
+    print("\n Trainable Parameters:")
+    total_params = 0
+    trainable_params = 0
+    frozen_params = 0
+    layer_summary = defaultdict(lambda: {'trainable': 0, 'frozen': 0})
+
+    for name, param in model.named_parameters():
+        n_params = param.numel()
+        total_params += n_params
+
+        # Figure out where this param belongs
+        if name.startswith("bert.encoder.layer"):
+            layer_id = int(name.split(".")[3])
+            key = f"encoder.layer.{layer_id}"
+        elif name.startswith("bert.embeddings"):
+            key = "bert.embeddings"
+        elif name.startswith("bert.pooler"):
+            key = "bert.pooler"
+        elif name.startswith("classifier"):
+            key = "classifier"
+        else:
+            key = "other"
+
+        if param.requires_grad:
+            trainable_params += n_params
+            layer_summary[key]['trainable'] += n_params
+        else:
+            frozen_params += n_params
+            layer_summary[key]['frozen'] += n_params
+
+    # info.append layer-wise breakdown
+    for key, stats in sorted(layer_summary.items()):
+        print(f" - {key:<20} | trainable: {stats['trainable']:,} | frozen: {stats['frozen']:,}")
+
+    print("\n Overall Parameter Counts ")
+    print(f"Total Parameters:     {total_params:,}")
+    print(f"Trainable Parameters: {trainable_params:,}")
+    print(f"Frozen Parameters:    {frozen_params:,}")
+    print("\n")
+
+model_info = ""
+# Freezing Strategy
+if LAST_LAYER_ONLY:
+    # Freeze everything
+    for param in model.bert.parameters():
+        param.requires_grad = False
+
+    # Unfreeze last N encoder layers
+    N = 4
+    for i in range(12 - N, 12):
+        for name, param in model.bert.encoder.layer[i].named_parameters():
+            param.requires_grad = True
+
+    # Unfreeze classification head
+    for param in model.classifier.parameters():
+        param.requires_grad = True
+
+    model_info = f"Last {N} layers and classifier head will be fine-tuned.\n"
+    info.append(model_info)
+else:
+    for param in model.parameters():
+        param.requires_grad = True
+    model_info = "Full model will be fine-tuned.\n"
+    info.append(model_info)
+
+# info.append model summary
+# info.append_trainable_summary(model)
+
+config_dict = {
+    "run_id": run_id,
+    "LOAD_SPLITS": LOAD_SPLITS,
+    "LAST_LAYER_ONLY": LAST_LAYER_ONLY,
+    "VALIDATION": VALIDATION,
+    "VALIDATION_STOP_FACTOR": VALIDATION_STOP_FACTOR,
+    "SAVE_MODEL": SAVE_MODEL,
+    "LOSS_TYPE": LOSS_TYPE,
+    "INTERPRET": INTERPRET,
+    "INTERPRET_ONLY_POSITIVE": INTERPRET_ONLY_POSITIVE,
+    "INTERPRET_TOP_K_PERCENT": INTERPRET_TOP_K_PERCENT,
+    "initial_lr": initial_lr,
+    "constant_lr": constant_lr,
+    "lr_type": lr_type,
+    "freeze info": info
+}
+
+print("\n".join(info))
+with open(os.path.join(MAIN_OUTPUT_DIR, "config.json"), "w") as f:
+    final_output = "\n".join(info)
+    f.write(final_output)
+
+print(f" Saved run config with run_id={run_id} in {OUTPUT_DIR}")
+
+# do the class weights
+label_counts = Counter(train_df["label"])
+total = sum(label_counts.values())
+
+neg_weight = total / (2.0 * label_counts[0])
+pos_weight = total / (2.0 * label_counts[1])
+class_weights = torch.tensor([neg_weight, pos_weight], dtype=torch.float).to(DEVICE)
+
+# Optimizer and Loss
+class FocalLoss(torch.nn.Module):
+    def __init__(self, alpha=None, gamma=2.0):
+
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def forward(self, inputs, targets):
+        ce_loss = F.cross_entropy(inputs, targets, reduction='none')
+        pt = torch.exp(-ce_loss)  # prob of correct class
+
+        if self.alpha is not None:
+            if self.alpha.type() != inputs.data.type():
+                self.alpha = self.alpha.type_as(inputs.data)
+            at = self.alpha[targets]  # per-sample weight
+        else:
+            at = 1.0
+
+        loss = at * (1 - pt) ** self.gamma * ce_loss
+        return loss.mean()
+        
+if LOSS_TYPE.lower() == "focal_loss":
+    loss_fn = FocalLoss(alpha=class_weights, gamma=2.0)
+elif LOSS_TYPE.lower() == "cross_entropy":
+    loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights)
+else:
+    raise ValueError(f"Unsupported loss type: {LOSS_TYPE}")
+
+optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=LR)
+
+if constant_lr or lr_type.lower() == "lrstep":
+    lr_scheduler = StepLR(
+        optimizer,
+        step_size=1,
+        gamma=1.0 if constant_lr else 0.1
+    )
+elif lr_type.lower() == "lindecay" and not constant_lr:
+    print(" Using linear decay learning rate scheduler.")
+    total_training_steps = MAX_EPOCHS * len(train_loader)
+    num_warmup_steps = int(0.1 * total_training_steps)  # 10% warmup
+
+    lr_scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=total_training_steps)
+
+elif lr_type.lower() == "lrplateau" and not constant_lr:
+    print(" Using ReduceLROnPlateau scheduler.")
+    lr_scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.3, patience=2)
+else:
+    print(f" Using {lr_type} scheduler with constant learning rate.")
+
+
+# === Setup ===
+patience = 2
+best_auc = 0
+best_loss = float('inf')
+epochs_no_improve = 0
+
+train_losses = []
+val_losses = []
+val_aucs = []
+val_precisions = []
+val_recalls = []
+val_f1s = []
+
+# === Training Loop ===
+for epoch in range(1, MAX_EPOCHS + 1):
+    model.train()
+    total_loss = 0
+    print(f"\nEpoch {epoch}/{MAX_EPOCHS}")
+
+    for batch in tqdm(train_loader):
+        batch = {k: v.to(DEVICE) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+        outputs = model(input_ids=batch['input_ids'], attention_mask=batch['attention_mask'])
+        loss = loss_fn(outputs.logits, batch["labels"])
+        loss.backward()
+        total_loss += loss.item()
+        optimizer.step()
+        if lr_type.lower() != "lrplateau" or constant_lr:
+            lr_scheduler.step() # type: ignore
+        optimizer.zero_grad()
+
+    avg_train_loss = total_loss / len(train_loader)
+    print(f"Epoch {epoch} training loss: {avg_train_loss:.4f}")
+    train_losses.append(avg_train_loss)
+
+    # === Validation ===
+    if VALIDATION:
+        model.eval()
+        all_logits, all_labels = defaultdict(list), {}
+        total_val_loss = 0
+
+        with torch.no_grad():
+            for batch in val_loader:
+                batch = {k: v.to(DEVICE) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+                outputs = model(input_ids=batch['input_ids'], attention_mask=batch['attention_mask'])
+                logits = outputs.logits
+
+                loss = loss_fn(logits, batch["labels"])
+                total_val_loss += loss.item()
+
+                for pid, logit, label in zip(batch['pid'], logits, batch['labels']):
+                    all_logits[pid].append(logit.cpu().numpy())
+                    all_labels[pid] = label.cpu().item()
+
+        avg_val_loss = total_val_loss / len(val_loader)
+
+        if lr_type.lower() == "lrplateau" and not constant_lr:
+            lr_scheduler.step(avg_val_loss) # type: ignore
+
+        pred_labels, true_labels = [], []
+        for pid, logit_list in all_logits.items():
+            avg_logits = np.mean(logit_list, axis=0)
+            pred_labels.append(np.argmax(avg_logits))
+            true_labels.append(all_labels[pid])
+
+        val_auc = roc_auc_score(true_labels, pred_labels)
+        print("\nValidation Results:")
+        print(classification_report(true_labels, pred_labels, digits=4))
+        print(f"AUC: {val_auc:.4f}")
+        print(f"Validation Loss: {avg_val_loss:.4f}")
+        
+        precision = precision_score(true_labels, pred_labels)
+        recall = recall_score(true_labels, pred_labels)
+        f1 = f1_score(true_labels, pred_labels)
+
+        val_losses.append(avg_val_loss)
+        val_aucs.append(val_auc)
+        val_precisions.append(precision)
+        val_recalls.append(recall)
+        val_f1s.append(f1)
+
+        # === Early Stopping Logic ===
+        if VALIDATION_STOP_FACTOR.lower() == "auc":
+            if val_auc > best_auc:
+                best_auc = val_auc
+                epochs_no_improve = 0
+                best_model = copy.deepcopy(model)
+                print(" Best model saved based on AUC.")
+            else:
+                epochs_no_improve += 1
+                print(f" No AUC improvement for {epochs_no_improve} epoch(s).")
+
+        elif VALIDATION_STOP_FACTOR.lower() == "loss":
+            if avg_val_loss < best_loss:
+                best_loss = avg_val_loss
+                epochs_no_improve = 0
+                best_model = copy.deepcopy(model)
+                print(" Best model saved based on validation loss.")
+            else:
+                epochs_no_improve += 1
+                print(f" No validation loss improvement for {epochs_no_improve} epoch(s).")
+
+        else:
+            raise ValueError(f"Unsupported validation stop factor: {VALIDATION_STOP_FACTOR}")
+
+        if epochs_no_improve >= patience:
+            print(f"\n Early stopping triggered after {patience} epoch(s) with no improvement.")
+            break
+
+print(f"\n Training completed. Best validation AUC: {best_auc:.4f}")
+
+
+
+# Final Test Evaluation
+print("\n Evaluating on test set...")
+model_to_eval = best_model if best_model is not None else model
+
+if SAVE_MODEL:
+    print(" Saving model...")
+    os.makedirs(SAVE_DIR, exist_ok=True)
+    model_to_eval.save_pretrained(SAVE_DIR)
+    tokenizer.save_pretrained(SAVE_DIR)
+    print(f" Model saved to {SAVE_DIR}")
+
+model_to_eval.to(DEVICE) # type: ignore
+model_to_eval.eval()
+all_logits, all_labels = defaultdict(list), {}
+with torch.no_grad():
+    for batch in tqdm(test_loader):
+        batch = {k: v.to(DEVICE) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+        logits = model(input_ids=batch['input_ids'], attention_mask=batch['attention_mask']).logits
+        for pid, logit, label in zip(batch['pid'], logits, batch['labels']):
+            all_logits[pid].append(logit.cpu().numpy())
+            all_labels[pid] = label.cpu().item()
+
+pred_labels, true_labels = [], []
+for pid, logit_list in all_logits.items():
+    avg_logits = np.mean(logit_list, axis=0)
+    pred_labels.append(np.argmax(avg_logits))
+    true_labels.append(all_labels[pid])
+
+print("\n Test Results:")
+print(classification_report(true_labels, pred_labels, digits=4))
+print(f"AUC: {roc_auc_score(true_labels, pred_labels):.4f}")
+
+test_precision = precision_score(true_labels, pred_labels)
+test_recall = recall_score(true_labels, pred_labels)
+test_f1 = f1_score(true_labels, pred_labels)
+test_auc = roc_auc_score(true_labels, pred_labels)
+
+# save results to CSV
+epochs = list(range(1, len(train_losses) + 1))
+metrics_df = pd.DataFrame({
+    "epoch": epochs,
+    "train_loss": train_losses,
+    "val_loss": val_losses,
+    "val_auc": val_aucs,
+    "val_precision": val_precisions,
+    "val_recall": val_recalls,
+    "val_f1": val_f1s,
+    "phase": "train_val"
+})
+
+test_metrics = pd.DataFrame({
+    "epoch": ["test"],
+    "train_loss": [None],
+    "val_loss": [None],
+    "val_auc": [test_auc],
+    "val_precision": [test_precision],
+    "val_recall": [test_recall],
+    "val_f1": [test_f1],
+    "phase": ["test"]
+})
+
+metrics_df = pd.concat([metrics_df, test_metrics], ignore_index=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+metrics_csv_path = os.path.join(OUTPUT_DIR, "training_metrics.csv")
+metrics_df.to_csv(metrics_csv_path, index=False)
+
+# Loss plot
+plt.figure(figsize=(10,6))
+plt.plot(epochs, train_losses, label='Train Loss')
+plt.plot(epochs, val_losses, label='Val Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.title('Training and Validation Loss')
+plt.legend()
+plt.grid(True)
+plt.savefig(os.path.join(OUTPUT_DIR, "loss_plot.png"))
+plt.close()
+
+
+# Validation metrics plot
+plt.figure(figsize=(10,6))
+plt.plot(epochs, val_aucs, label='Val AUC')
+plt.plot(epochs, val_precisions, label='Val Precision')
+plt.plot(epochs, val_recalls, label='Val Recall')
+plt.plot(epochs, val_f1s, label='Val F1 Score')
+
+# Add test metric points as red dots
+plt.scatter(len(epochs) + 1, test_auc, color='red', label='Test AUC', zorder=5)
+plt.scatter(len(epochs) + 1, test_precision, color='red', marker='x', label='Test Precision', zorder=5)
+plt.scatter(len(epochs) + 1, test_recall, color='red', marker='^', label='Test Recall', zorder=5)
+plt.scatter(len(epochs) + 1, test_f1, color='red', marker='s', label='Test F1', zorder=5)
+
+# Add dashed horizontal lines for test metrics (threshold lines)
+plt.axhline(y= float(test_auc), color='red', linestyle='--', alpha=0.4)
+plt.axhline(y= float(test_precision), color='red', linestyle='--', alpha=0.4)
+plt.axhline(y= float(test_recall), color='red', linestyle='--', alpha=0.4)
+plt.axhline(y= float(test_f1), color='red', linestyle='--', alpha=0.4)
+
+plt.xlabel('Epoch')
+plt.ylabel('Score')
+plt.title('Validation Metrics Over Epochs with Test Results Highlighted')
+plt.legend()
+plt.grid(True)
+plt.savefig(os.path.join(OUTPUT_DIR, "val_metrics_plot_with_test.png"))
+plt.close()
+
+if INTERPRET_ONLY_POSITIVE:
+    test_notes = test_df[test_df.label == 1]["text"].dropna().tolist()
+else:
+    test_notes = test_df["text"].dropna().tolist()
+# Interpret the model
+if (INTERPRET):
+    model_to_eval.config.output_attentions = True
+    interpret_highlighter(
+        model=model_to_eval,
+        tokenizer=tokenizer,
+        notes=test_notes,
+        output_html_path=os.path.join(OUTPUT_DIR, "test_interpretation.html"),
+        max_len=512,
+        stride=256,
+        top_k_percent=INTERPRET_TOP_K_PERCENT
+    )
+
+    top_k_list = interpret_dictionary(
+        model=model_to_eval,
+        tokenizer=tokenizer,
+        notes=test_notes,
+        top_k_percent=INTERPRET_TOP_K_PERCENT
+    )
+
+    top_k_list.to_csv(os.path.join(OUTPUT_DIR, "top_k_interpretation.csv"), index=False)
+    print(f" Interpretation complete : {os.path.join(OUTPUT_DIR, 'top_k_interpretation.csv')}")
