@@ -142,7 +142,7 @@ def process_file(input_file_path, vectors_txt_path, eqs_in_path):
     return len(domain_order), len(monomers)
 
 if __name__ == "__main__":
-    input_file = "monomers.txt"  # Input file path
+    input_file = "tmp_monomers.txt"  # Input file path
     vectors_txt = "vectors.txt"  # Output vectors file path
     eqs_in_file = "eqs.in"  # Path for the eqs.in file
     

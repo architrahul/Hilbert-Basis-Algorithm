@@ -1,0 +1,4 @@
+# Total unique Hilbert basis vectors: 0
+# Format: space-separated vector in 17-dimensional space
+# Computed using k=16 combinations
+
