@@ -3,25 +3,38 @@ import time
 from itertools import combinations
 from datetime import datetime
 import os
+from itertools import combinations, islice
+import math
 
 # -------------------------
 # Config
 # -------------------------
-monomer_file = "monomers.txt"   # Your full monomers file
-k = 16                         # Number of monomers to pick per combination
-python_script = "monomers_to_normaliz.py"  # Path to your conversion script
+monomer_file = "monomers.txt" 
+k = 7                         # Number of monomers to pick per combination
+max_loops = 100
+python_script = "monomers_to_normaliz.py"
 normaliz_exe = '/Users/archit/Desktop/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz'
 log_file = "benchmark_log.txt"  # Log file path
-hilbert_basis_file = "all_hilbert_basis.txt"  # File to store all unique Hilbert basis vectors
+hilbert_basis_file = "all_hilbert_basis.txt" 
 
 # Temporary files for each loop
 tmp_monomers = "tmp_monomers.txt"
 tmp_vectors = "vectors.txt"
 tmp_eqs = "eqs.in"
 
-# -------------------------
+# Clean up any previous Normaliz output files
+def cleanup_normaliz_files():
+    """Remove all Normaliz output files from previous runs"""
+    patterns = ["eqs.out", "eqs.gen", "eqs.inv", "eqs.cst", "eqs.typ", "eqs.egn"]
+    for pattern in patterns:
+        if os.path.exists(pattern):
+            os.remove(pattern)
+            print(f"Cleaned up: {pattern}")
+
+# Clean up at the start
+cleanup_normaliz_files()
+
 # Read all monomers
-# -------------------------
 with open(monomer_file, 'r') as f:
     all_monomers = [line.strip() for line in f if line.strip()]
 
@@ -29,18 +42,14 @@ n = len(all_monomers)
 if k > n:
     raise ValueError(f"k={k} is larger than total number of monomers={n}")
 
-# -------------------------
 # Generate all combinations
-# -------------------------
-all_combinations = list(combinations(range(n), k))  # Store indices instead of monomers
-total_combinations = len(all_combinations)
+total_combinations = math.comb(n, k)
+loops_to_run = min(total_combinations, max_loops)
+combinations_iter = combinations(range(n), k)
 
 # Store all unique Hilbert basis vectors (in original n-dimensional space)
 all_hilbert_vectors = set()
 
-# -------------------------
-# Helper function to read Normaliz output
-# -------------------------
 def read_hilbert_basis(base_filename="eqs"):
     """
     Read the Hilbert basis from Normaliz output file (eqs.out).
@@ -69,19 +78,15 @@ def read_hilbert_basis(base_filename="eqs"):
             print(f"Warning: Could not find 'Hilbert basis elements:' in {output_file}")
             return []
         
-        # Read vectors until we hit a blank line or another section
         for i in range(hilbert_start, len(lines)):
             line = lines[i].strip()
             
-            # Stop at empty line or next section
             if not line or line.startswith("***") or "extreme rays" in line.lower():
                 break
             
-            # Skip comment lines
             if line.startswith("#"):
                 continue
             
-            # Parse the vector
             try:
                 vector = [int(x) for x in line.split()]
                 if vector:
@@ -111,21 +116,16 @@ def expand_vector_to_full_space(reduced_vector, selected_indices, k_current, n):
     # Only take the first k_current elements (corresponding to the actual monomers)
     monomer_part = reduced_vector[:k_current]
     
-    # Create full vector with zeros
     full_vector = [0] * n
     
-    # Place the monomer values at their correct positions
     for i, idx in enumerate(selected_indices):
         if i < len(monomer_part):
             full_vector[idx] = monomer_part[i]
     
     return tuple(full_vector)
 
-# -------------------------
-# Open log file
-# -------------------------
+
 with open(log_file, 'w') as log:
-    # Write header
     log.write(f"Benchmark started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     log.write(f"Total monomers: {n}\n")
     log.write(f"k value: {k}\n")
@@ -136,22 +136,18 @@ with open(log_file, 'w') as log:
     print(f"Total combinations to test: {total_combinations} (C({n},{k}))")
     print(f"Logging to: {log_file}")
     
-    # -------------------------
-    # Run benchmarking loop
-    # -------------------------
     times = []
     
-    for combo_idx, selected_indices in enumerate(all_combinations):
-        # Get the selected monomers
-        subset = [all_monomers[i] for i in selected_indices]
-        k_current = len(selected_indices)  # This should always equal k, but be explicit
+    for combo_idx, selected_indices in enumerate(islice(combinations_iter, loops_to_run)):
+        cleanup_normaliz_files()
         
-        # Write temporary monomers file
+        subset = [all_monomers[i] for i in selected_indices]
+        k_current = len(selected_indices)
+        
         with open(tmp_monomers, 'w') as f:
             for m in subset:
                 f.write(m + "\n")
         
-        # Run the conversion script to generate eqs.in
         subprocess.run(["python", python_script], check=True, 
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
@@ -166,22 +162,21 @@ with open(log_file, 'w') as log:
         # Read the Hilbert basis output from Normaliz
         reduced_vectors = read_hilbert_basis("eqs")
         
-        # Debug: Print first combination details
-if combo_idx == 0:
-    print(f"\nDEBUG - First combination:")
-    print(f"  Selected indices: {selected_indices}")
-    print(f"  k_current: {k_current}")
-    print(f"  Found {len(reduced_vectors)} Hilbert basis vectors")
-    if reduced_vectors:
-        print(f"  First vector length: {len(reduced_vectors[0])}")
-        print(f"  First 5 vectors:")
-        for i in range(min(5, len(reduced_vectors))):
-            vec = reduced_vectors[i]
-            print(f"    Vector {i}: {vec}")
-            expanded = expand_vector_to_full_space(vec, selected_indices, k_current, n)
-            print(f"    Expanded: {expanded}")
+        if combo_idx == 0:
+            print(f"\nDEBUG - First combination:")
+            print(f"  Selected indices: {selected_indices}")
+            print(f"  k_current: {k_current}")
+            print(f"  Found {len(reduced_vectors)} Hilbert basis vectors")
+            if reduced_vectors:
+                print(f"  First vector length: {len(reduced_vectors[0])}")
+                print(f"  First 5 vectors (full):")
+                for i in range(min(5, len(reduced_vectors))):
+                    vec = reduced_vectors[i]
+                    print(f"    Vector {i}: {vec}")
+                    expanded = expand_vector_to_full_space(vec, selected_indices, k_current, n)
+                    print(f"    Expanded: {expanded}")
+                    print()
         
-        # Expand each vector to full space and add to set
         num_new_vectors = 0
         for reduced_vec in reduced_vectors:
             full_vec = expand_vector_to_full_space(reduced_vec, selected_indices, k_current, n)
@@ -189,24 +184,22 @@ if combo_idx == 0:
                 all_hilbert_vectors.add(full_vec)
                 num_new_vectors += 1
         
-        # Log to file
         log_line = f"Combination {combo_idx+1}/{total_combinations}: {elapsed:.3f} sec, " \
                    f"found {len(reduced_vectors)} vectors, {num_new_vectors} new, " \
                    f"total unique: {len(all_hilbert_vectors)}\n"
         log.write(log_line)
         log.flush()
         
-        # Print to console
         print(f"Combination {combo_idx+1}/{total_combinations}: {elapsed:.3f} sec, "
               f"found {len(reduced_vectors)} vectors, {num_new_vectors} new, "
               f"total unique: {len(all_hilbert_vectors)}")
     
-    # -------------------------
-    # Summary
-    # -------------------------
-    avg_time = sum(times)/len(times)
-    min_time = min(times)
-    max_time = max(times)
+    if times:
+        avg_time = sum(times)/len(times)
+        min_time = min(times)
+        max_time = max(times)
+    else:
+        avg_time = min_time = max_time = 0.0
     
     summary = f"""
 {'='*70}
@@ -223,15 +216,12 @@ Benchmark completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     log.write(summary)
     print(summary)
 
-# -------------------------
-# Write all Hilbert basis vectors to file
-# -------------------------
 with open(hilbert_basis_file, 'w') as f:
     f.write(f"# Total unique Hilbert basis vectors: {len(all_hilbert_vectors)}\n")
     f.write(f"# Format: space-separated vector in {n}-dimensional space\n")
     f.write(f"# Computed using k={k} combinations\n\n")
     
-    for vec in sorted(all_hilbert_vectors):  # Sort for consistent output
+    for vec in sorted(all_hilbert_vectors):
         f.write(' '.join(map(str, vec)) + '\n')
 
 print(f"\nAll unique Hilbert basis vectors written to: {hilbert_basis_file}")

@@ -11,8 +11,8 @@ g h i j e
 g* h* i* j*
 h* i* j* e*
 j e f
-#g h
+g h
 h i
-#i j
+i j
 e f
 e* f*

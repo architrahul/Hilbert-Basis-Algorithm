@@ -1,0 +1,17 @@
+Choose the subset of size k, do Z iterations instead of nCk.
+Say the max. types of monomers in a set of hilbert basis element is c. and if c < k and we run Z number of iterations randomly.
+Find probability that this monomer is missed.
+
+Covering design.
+
+Merge: make CLI for the pipeline.
+
+
+For a fixed value of k, small find an optimal t in for which we can apply the covering design algorithm 
+as well as the hilbert basis algorithm in minimum time.
+
+
+maybe we run one iteration of each value of t and then 
+since we know the value of C(n, k(the subset size which we're gauranting will be covered), t) we can multiply that time like
+ t x C(n, k, t) and find optimized t and run for it.
+

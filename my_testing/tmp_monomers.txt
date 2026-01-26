@@ -1,16 +1,7 @@
-a* b* c* d*
-b* c* d* e*
-d e f
-a b
-b c
-c d
-e f
-e* f*
-e f g h i
-e* f* g* h*
-f* g* h* i*
-h i j
-f g
-g h
-i j
-i* j*
+[x1]1 [x1]2
+[x2]1 [x2]2
+[x3]1 [x3]2
+[x4]1 [x4]2
+[x5]1 [x5]2
+[x7]1 [x7]2
+[y3]1 [y3]2
