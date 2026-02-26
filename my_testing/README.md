@@ -203,3 +203,176 @@ Start with technical content
 Dependancies/Reproducibility:
 
 Need sage and online packages etc
+
+
+# Trie-Based Compression Heuristic for Expanding Covering Designs
+
+## Problem Setting
+
+Let ( V = [n] ) be a ground set of size ( n ).
+A covering design ( \mathcal{F} \subseteq \binom{V}{k} ) is said to be an **((n,k,t))-covering design** if every (t)-subset of (V) is contained in at least one block (B \in \mathcal{F}).
+
+We assume an existing ((n,k,t))-covering design is known, and we wish to construct a (not necessarily optimal) ((n,k+\Delta k,t))-covering design while attempting to **reduce the number of blocks** using structural information from the original family.
+
+---
+
+## Key Observation (Monotonicity of Coverage)
+
+If a block (B) covers a (t)-subset (T), then any superset (B' \supseteq B) also covers (T).
+
+Therefore, replacing blocks by carefully chosen **unions of overlapping blocks** preserves the covering property.
+
+---
+
+## Trie Representation of the Design
+
+We represent the family ( \mathcal{F} ) as a **prefix tree (trie)**:
+
+* Each block ( B = {a_1 < a_2 < \dots < a_k} ) is stored as an increasing sequence.
+* Level (i) of the trie corresponds to the (i)-th smallest element.
+* A root-to-leaf path represents one block.
+* The height of the trie is (k).
+* Leaves are in one-to-one correspondence with the blocks of ( \mathcal{F} ).
+
+This representation exposes **shared structure** among highly overlapping blocks.
+
+---
+
+## Local Structure at Level (k-1)
+
+A node at level (k-1) corresponds to a common prefix
+
+[
+P = {a_1,\dots,a_{k-1}}.
+]
+
+Its children correspond to blocks of the form
+
+[
+B_i = P \cup {x_i}.
+]
+
+These blocks differ in only one element and thus have very large intersection.
+
+---
+
+## Compression Idea
+
+If such a node has (m) children, we may replace those (m) blocks with their union:
+
+[
+U = \bigcup_{i=1}^m B_i = P \cup {x_1,\dots,x_m}.
+]
+
+Then
+
+[
+|U| = (k-1) + m.
+]
+
+If
+
+[
+m \le \Delta k,
+]
+
+we have
+
+[
+|U| \le k + \Delta k - 1,
+]
+
+and we can arbitrarily add elements (if necessary) to obtain a block of size exactly (k+\Delta k).
+
+---
+
+## Why Coverage Is Preserved
+
+Each removed block (B_i) satisfies
+
+[
+B_i \subseteq U.
+]
+
+Thus any (t)-subset previously covered by (B_i) remains covered by (U).
+This follows directly from monotonicity.
+
+Therefore, replacing ( {B_1,\dots,B_m} ) by (U) maintains the covering property.
+
+---
+
+## Resulting Heuristic
+
+We obtain a deterministic compression algorithm:
+
+### Algorithm Sketch
+
+```
+Input: (n,k,t)-covering design F, expansion parameter Δk
+Output: A valid (n,k+Δk,t)-covering design F'
+
+1. Build trie representation of F.
+2. For each node P at level k−1:
+       Let children correspond to blocks {B1,...,Bm}.
+       If m ≤ Δk:
+            Replace {B1,...,Bm} with U = ⋃ Bi.
+            Pad U (if necessary) to size k+Δk.
+3. Keep all remaining blocks (extend them arbitrarily to size k+Δk).
+4. Return the modified family.
+```
+
+---
+
+## Interpretation
+
+This method performs **local block coalescence**:
+
+* Highly overlapping blocks are clustered.
+* Each cluster is replaced by a single larger block.
+* The process is polynomial-time and purely combinatorial.
+* No global optimization (e.g., solving Set Cover) is attempted.
+
+---
+
+## What This Is (and Is Not)
+
+### ✔ Provides
+
+* A deterministic way to lift designs from (k) to (k+\Delta k).
+* A structure-aware reduction in block count when overlap is high.
+* A tractable alternative to recomputing a covering design from scratch.
+
+### ✘ Does Not Guarantee
+
+* Minimality of the resulting design.
+* Optimal compression (global merging is NP-hard).
+* Improvement when the original design lacks prefix clustering.
+
+---
+
+## Conceptual View
+
+The method can be viewed as solving a restricted version of:
+
+[
+\text{Cluster blocks } C_1,\dots,C_r \text{ such that }
+\left|\bigcup_{B\in C_i} B\right| \le k+\Delta k.
+]
+
+The trie enforces **local clustering**, making the problem tractable while still exploiting combinatorial overlap.
+
+---
+
+## Possible Directions for Analysis
+
+* Bounding achievable compression under random or extremal constructions.
+* Comparing with known asymptotics of (C(n,k,t)).
+* Studying alternative clustering rules beyond shared prefixes.
+* Viewing the method as a constrained hypergraph coarsening operation.
+
+---
+
+## Status
+
+This is currently a heuristic framework rather than a proven bound-producing construction.
+Its usefulness likely depends on the structural regularity of the starting covering design.
