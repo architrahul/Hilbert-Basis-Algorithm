@@ -3,27 +3,25 @@ import time
 from datetime import datetime
 import os
 import sys
+import argparse
+import itertools
 import requests
 from bs4 import BeautifulSoup
 
 
-# -------------------------
 # Config
-# -------------------------
 monomer_file = "monomers.txt"
 python_script = "monomers_to_normaliz.py"
 normaliz_exe = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz"
-log_file = "covering_design_log.txt"
+log_file = "log.txt"
 
 tmp_monomers = "tmp_monomers.txt"
 tmp_eqs = "eqs.in"
 
-PROBE_LIMIT = 100  # number of subsets to probe
+PROBE_LIMIT = 100
 
 
-# -------------------------
 # Utility functions
-# -------------------------
 
 def cleanup_normaliz_files():
     patterns = ["eqs.out", "eqs.gen", "eqs.inv", "eqs.cst", "eqs.typ", "eqs.egn"]
@@ -73,18 +71,11 @@ def expand_vector_to_full_space(reduced_vector, selected_indices, n):
     return tuple(full_vector)
 
 
-# -------------------------
 # Online covering fetch
-# -------------------------
 
 def fetch_covering_online(v: int, k: int, t: int):
-    """
-    Fetches a C(v, k, t) covering design from ljcr.dmgordon.org.
-    Returns a list of blocks (each block is a list of 1-indexed integers).
-    Raises RuntimeError if no covering is available for the given parameters.
-    """
     url = f"https://ljcr.dmgordon.org/show_cover.php?v={v}&k={k}&t={t}"
-    print(f"Fetching covering C({v},{k},{t})...")
+    print(f"Fetching covering C({v},{k},{t}) ...")
 
     r = requests.get(
         url,
@@ -112,17 +103,68 @@ def fetch_covering_online(v: int, k: int, t: int):
     return blocks
 
 
-def load_covering_blocks(v: int, k: int, t: int):
+# -------------------------
+# Greedy covering design
+# -------------------------
+
+def compute_covering_greedy(v: int, k: int, t: int):
+    print(f"  Computing greedy covering C({v},{k},{t}) ...")
+
+    universe = list(range(1, v + 1))
+    all_t_subsets = set(itertools.combinations(universe, t))
+    uncovered = set(all_t_subsets)
+    blocks = []
+    max_possible = len(list(itertools.combinations(range(k), t)))
+
+    while uncovered:
+        best_block: tuple[int, ...] = next(itertools.combinations(universe, k))  # safe default
+        best_count = -1
+
+        for block in itertools.combinations(universe, k):
+            count = len(set(itertools.combinations(block, t)) & uncovered)
+            if count > best_count:
+                best_count = count
+                best_block = block
+            if best_count == max_possible:
+                break
+
+        blocks.append(list(best_block))
+        uncovered -= set(itertools.combinations(best_block, t))
+
+    print(f"  Greedy covering complete: {len(blocks)} blocks.")
+    return blocks
+
+
+# -------------------------
+# Unified covering loader
+# -------------------------
+
+def load_covering_blocks(v: int, k: int, t: int, fallback_greedy: bool = False):
     """
-    Returns blocks for a covering design. If k == v, yields the trivial
-    full block. Otherwise fetches from the online source.
-    Raises RuntimeError if unavailable.
+    Returns blocks for a C(v, k, t) covering design.
+    - If k == v, yields the single trivial full block.
+    - Otherwise tries the online DB.
+    - If online fails and fallback_greedy is True, computes greedily.
+    - If online fails and fallback_greedy is False, raises RuntimeError.
     """
     if k == v:
         yield list(range(1, v + 1))
         return
 
-    blocks = fetch_covering_online(v, k, t)
+    try:
+        blocks = fetch_covering_online(v, k, t)
+        for block in blocks:
+            yield block
+        return
+    except (RuntimeError, requests.RequestException) as e:
+        if not fallback_greedy:
+            raise RuntimeError(
+                f"Online fetch failed for C({v},{k},{t}): {e}\n"
+                f"  Tip: run with --fallback-greedy to compute locally."
+            ) from e
+        print(f"  Online fetch failed ({e}). Falling back to greedy computation.")
+
+    blocks = compute_covering_greedy(v, k, t)
     for block in blocks:
         yield block
 
@@ -131,14 +173,13 @@ def load_covering_blocks(v: int, k: int, t: int):
 # Core pipeline with pruning
 # -------------------------
 
-def run_for_k_value(k, all_monomers, n, t, min_normaliz_time, log):
+def run_for_k_value(k, all_monomers, n, t, min_normaliz_time, log, fallback_greedy):
     print(f"\n{'='*70}")
     print(f"Testing k={k}")
     print(f"{'='*70}\n")
 
-    # Fetch covering blocks upfront — if unavailable, skip this k
     try:
-        blocks = list(load_covering_blocks(n, k, t))
+        blocks = list(load_covering_blocks(n, k, t, fallback_greedy=fallback_greedy))
     except (RuntimeError, requests.RequestException) as e:
         print(f"Skipping k={k}: {e}")
         log.write(f"\nk={k}: SKIPPED (covering unavailable: {e})\n")
@@ -238,11 +279,11 @@ def run_for_k_value(k, all_monomers, n, t, min_normaliz_time, log):
             all_hilbert_vectors.add(fv)
 
     total_time = sum(times)
+    avg = (total_time / num_subsets) if num_subsets else 0.0
 
     log.write(f"\nk={k}: FULL RUN COMPLETE\n")
     log.write(f"  Number of subsets: {num_subsets}\n")
     log.write(f"  Total Normaliz time: {total_time:.3f}s\n")
-    avg = (total_time / num_subsets) if num_subsets else 0.0
     log.write(f"  Avg Normaliz time per subset: {avg:.3f}s\n")
     log.write(f"  Unique Hilbert basis vectors: {len(all_hilbert_vectors)}\n")
     log.flush()
@@ -251,7 +292,7 @@ def run_for_k_value(k, all_monomers, n, t, min_normaliz_time, log):
         "k": k,
         "num_subsets": num_subsets,
         "total_normaliz_time": total_time,
-        "avg_normaliz_time_per_subset": total_time / num_subsets,
+        "avg_normaliz_time_per_subset": avg,
         "unique_vectors": len(all_hilbert_vectors)
     }, total_time
 
@@ -261,9 +302,16 @@ def run_for_k_value(k, all_monomers, n, t, min_normaliz_time, log):
 # -------------------------
 
 def main():
+    parser = argparse.ArgumentParser(description="Vary-k Hilbert basis pipeline")
+    parser.add_argument(
+        "--fallback-greedy",
+        action="store_true",
+        help="If a covering design is not found online, compute one greedily instead of skipping."
+    )
+    args = parser.parse_args()
+
     cleanup_normaliz_files()
 
-    # ---- Read monomers ----
     all_monomers = []
     with open(monomer_file, "r") as f:
         for line in f:
@@ -277,14 +325,17 @@ def main():
 
     n = len(all_monomers)
     print(f"\nDetected number of monomers: n = {n}")
-    print(f"Note: Online covering lookup is limited to n < 100, k ≤ 25, t ≤ 8\n")
+    print(f"Note: Online covering lookup is limited to n < 100, k ≤ 25, t ≤ 8")
+    if args.fallback_greedy:
+        print("Greedy fallback: ENABLED (will compute locally if not found online)\n")
+    else:
+        print("Greedy fallback: DISABLED (pass --fallback-greedy to enable)\n")
 
     t = int(input("Enter value of t (default=5): ") or 5)
     k_start = int(input(f"Enter starting k (≤ {n}): ").strip())
     include_base = input(f"Include base case k={n}? (y/n, default=n): ").strip().lower() or "n"
 
     k_values = list(range(k_start, t, -1))
-
     if include_base == "y" and n not in k_values:
         k_values = [n] + k_values
 
@@ -296,15 +347,17 @@ def main():
         log.write(f"Started: {datetime.now()}\n")
         log.write(f"n={n}, t={t}\n")
         log.write(f"k values: {k_values}\n")
+        log.write(f"Greedy fallback: {args.fallback_greedy}\n")
         log.write("="*70 + "\n")
 
         try:
             for k in k_values:
-                result, min_total_time = run_for_k_value(k, all_monomers, n, t, min_total_time, log)
-
+                result, min_total_time = run_for_k_value(
+                    k, all_monomers, n, t, min_total_time, log,
+                    fallback_greedy=args.fallback_greedy
+                )
                 if result is None:
                     continue
-
                 results.append(result)
                 if result["total_normaliz_time"] < min_total_time:
                     min_total_time = result["total_normaliz_time"]

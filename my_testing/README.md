@@ -172,11 +172,19 @@ This method under-approximates the full Hilbert basis due to loss of global bind
 
 1) Instead of using a locally available database, query the covering design from online if it's fast enough.
 (https://zenodo.org/records/10779737)
+
+^ DONE
+
 2) Try using the covering design algorithm and see how fast it is (It doesn't have to be the minimal covering design)
 https://github.com/sagemath/sage/blob/develop/src/sage/combinat/designs/covering_design.py
+
+^ PYTHON IMPLEMENTATION INSTEAD OF SAGE
+
 3) Add flags to the pipeline. (include base case for reference, use online querying (limited to n<100, k<=25, and t<=8),
 modes to shift between types of binding sites and monomer types for covering design, value of k, t, modes to use offline db or 
 )
+
+
 4) Add way to jump current iteration without changing the best time. Give some leeway in terms of approx time to account for random spikes.
 
 
