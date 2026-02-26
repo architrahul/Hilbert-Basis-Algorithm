@@ -1,0 +1,245 @@
+import subprocess
+import time
+from datetime import datetime
+import os
+import json
+
+# -------------------------
+# Config
+# -------------------------
+monomer_file = "monomers.txt"
+n = 21  # Number of monomers
+t = 5   # Fixed: guarantee every 5-subset is covered
+k_values = list(range(21, 5, -1))  # Test k from 21 down to 6
+
+covering_designs_file = "covering_designs_21_5.json"
+python_script = "monomers_to_normaliz.py"
+normaliz_exe = '/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz'
+log_file = "vary_k_ljcr_log.txt"
+
+# Temporary files
+tmp_monomers = "tmp_monomers.txt"
+tmp_eqs = "eqs.in"
+
+
+def cleanup_normaliz_files():
+    """Remove all Normaliz output files from previous runs"""
+    patterns = ["eqs.out", "eqs.gen", "eqs.inv", "eqs.cst", "eqs.typ", "eqs.egn"]
+    for pattern in patterns:
+        if os.path.exists(pattern):
+            os.remove(pattern)
+
+
+def read_hilbert_basis(base_filename="eqs"):
+    """Read the Hilbert basis from Normaliz output file"""
+    output_file = f"{base_filename}.out"
+
+    if not os.path.exists(output_file):
+        return []
+
+    vectors = []
+
+    try:
+        with open(output_file, 'r') as f:
+            lines = f.readlines()
+
+        hilbert_start = None
+        for i, line in enumerate(lines):
+            if "Hilbert basis elements:" in line:
+                hilbert_start = i + 1
+                break
+
+        if hilbert_start is None:
+            return []
+
+        for i in range(hilbert_start, len(lines)):
+            line = lines[i].strip()
+
+            if not line or line.startswith("***") or "extreme rays" in line.lower():
+                break
+
+            if line.startswith("#"):
+                continue
+
+            try:
+                vector = [int(x) for x in line.split()]
+                if vector:
+                    vectors.append(vector)
+            except ValueError:
+                continue
+
+    except Exception as e:
+        print(f"Error reading {output_file}: {e}")
+
+    return vectors
+
+
+def expand_vector_to_full_space(reduced_vector, selected_indices, k_current, n):
+    """Expand a k-dimensional vector to n-dimensional space"""
+    monomer_part = reduced_vector[:k_current]
+    full_vector = [0] * n
+
+    for i, idx in enumerate(selected_indices):
+        if i < len(monomer_part):
+            full_vector[idx] = monomer_part[i]
+
+    return tuple(full_vector)
+
+
+def run_for_k_value(k, all_monomers, covering_subsets, n, t):
+    """Run the pipeline for a specific k value using pre-downloaded covering design"""
+    print(f"\n{'='*70}")
+    print(f"Testing k={k}")
+    print(f"{'='*70}\n")
+
+    num_subsets = len(covering_subsets)
+    print(f"Using pre-downloaded covering design: {num_subsets} subsets\n")
+
+    # Run Normaliz on all subsets
+    all_hilbert_vectors = set()
+    times = []
+
+    for combo_idx, block in enumerate(covering_subsets):
+        cleanup_normaliz_files()
+
+        # Convert 1-indexed blocks from LJCR to 0-indexed
+        # LJCR uses {1, 2, ..., 21}, we use {0, 1, ..., 20}
+        selected_indices = tuple(x - 1 for x in block)
+
+        subset = [all_monomers[i] for i in selected_indices]
+        k_current = len(selected_indices)
+
+        with open(tmp_monomers, 'w') as f:
+            for m in subset:
+                f.write(m + "\n")
+
+        subprocess.run(["python", python_script], check=True,
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # Time only the Normaliz execution
+        start_time = time.time()
+        subprocess.run([normaliz_exe, "-d", "-N", tmp_eqs],
+                      capture_output=True, text=True)
+        elapsed = time.time() - start_time
+        times.append(elapsed)
+
+        reduced_vectors = read_hilbert_basis("eqs")
+
+        num_new_vectors = 0
+        for reduced_vec in reduced_vectors:
+            full_vec = expand_vector_to_full_space(reduced_vec, selected_indices, k_current, n)
+            if full_vec not in all_hilbert_vectors:
+                all_hilbert_vectors.add(full_vec)
+                num_new_vectors += 1
+
+        if (combo_idx + 1) % 10 == 0 or combo_idx == num_subsets - 1:
+            print(f"  Subset {combo_idx+1}/{num_subsets}: {elapsed:.3f} sec, "
+                  f"found {len(reduced_vectors)} vectors, {num_new_vectors} new, "
+                  f"total unique: {len(all_hilbert_vectors)}")
+
+    total_normaliz_time = sum(times)
+    avg_time = total_normaliz_time / len(times) if times else 0
+
+    result_summary = {
+        'k': k,
+        'num_subsets': num_subsets,
+        'total_normaliz_time': total_normaliz_time,
+        'avg_normaliz_time_per_subset': avg_time,
+        'unique_vectors': len(all_hilbert_vectors)
+    }
+
+    return result_summary
+
+
+def main():
+    cleanup_normaliz_files()
+
+    # Load covering designs
+    print(f"Loading covering designs from {covering_designs_file}...")
+    with open(covering_designs_file, 'r') as f:
+        covering_designs = json.load(f)
+
+    print(f"Loaded {len(covering_designs)} covering designs")
+
+    # Read all monomers
+    with open(monomer_file, 'r') as f:
+        all_monomers = [line.strip() for line in f if line.strip()]
+
+    actual_n = len(all_monomers)
+
+    global n
+    if actual_n < n:
+        print(f"WARNING: Found only {actual_n} monomers, expected {n}. Using n={actual_n}")
+        n = actual_n
+    else:
+        # Use only first n monomers
+        all_monomers = all_monomers[:n]
+
+    print(f"Total monomers: {n}")
+    print(f"Fixed t: {t}")
+    print(f"Testing k values: {k_values}")
+
+    results = []
+
+    with open(log_file, 'w') as log:
+        log.write(f"Vary k Benchmark (Fixed t={t}) - Using LJCR Covering Designs\n")
+        log.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        log.write(f"n={n}, t={t}\n")
+        log.write(f"Testing k values: {k_values}\n")
+        log.write("="*70 + "\n\n")
+
+        for k in k_values:
+            # Check if we have covering design for this k
+            key = f"C({n},{k},{t})"
+            if key not in covering_designs:
+                print(f"\nSkipping k={k}: no covering design available")
+                log.write(f"k={k}: SKIPPED (no covering design)\n")
+                continue
+
+            print(f"\n{'#'*70}")
+            print(f"# TESTING k={k}")
+            print(f"{'#'*70}")
+
+            covering_subsets = covering_designs[key]['blocks']
+            result = run_for_k_value(k, all_monomers, covering_subsets, n, t)
+            results.append(result)
+
+            log.write(f"\nk={k} Results:\n")
+            log.write(f"  Subsets: {result['num_subsets']}\n")
+            log.write(f"  Total Normaliz time: {result['total_normaliz_time']:.3f} sec\n")
+            log.write(f"  Avg Normaliz time per subset: {result['avg_normaliz_time_per_subset']:.3f} sec\n")
+            log.write(f"  Unique Hilbert basis vectors: {result['unique_vectors']}\n")
+            log.write("-"*70 + "\n")
+            log.flush()
+
+        # Find optimal k
+        if results:
+            optimal = min(results, key=lambda x: x['total_normaliz_time'])
+
+            summary = f"""
+{'='*70}
+SUMMARY - Optimal k Value (with t={t} fixed)
+{'='*70}
+"""
+            for r in results:
+                marker = " <-- OPTIMAL" if r['k'] == optimal['k'] else ""
+                summary += f"k={r['k']:2d}: {r['total_normaliz_time']:7.2f} sec total ({r['num_subsets']:4d} subsets, {r['unique_vectors']:4d} vectors){marker}\n"
+
+            summary += f"""
+{'='*70}
+Best k={optimal['k']} with total Normaliz time {optimal['total_normaliz_time']:.2f} sec
+  - {optimal['num_subsets']} subsets required
+  - {optimal['unique_vectors']} unique Hilbert basis vectors found
+  - Avg {optimal['avg_normaliz_time_per_subset']:.3f} sec per subset (Normaliz only)
+{'='*70}
+Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+
+            log.write(summary)
+            print(summary)
+        else:
+            print("\nNo results - no covering designs were available")
+
+
+if __name__ == "__main__":
+    main()

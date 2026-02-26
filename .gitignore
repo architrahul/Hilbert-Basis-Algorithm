@@ -1,1 +1,4 @@
 .claude/
+my_testing/*.db
+.DS_Store
+my_testing/logs/

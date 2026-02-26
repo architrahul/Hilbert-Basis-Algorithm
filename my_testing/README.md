@@ -76,9 +76,11 @@ This project uses **Normaliz** for Hilbert basis computation.
 
 ### Pipeline
 
+```bash
 python monomers_to_normaliz.py
 ../normaliz --verbose -N eqs
 python normaliz_to_monomers.py
+```
 
 1. `monomers_to_normaliz.py` converts monomer vectors into a Normaliz input file (`eqs.in`)
 2. `normaliz` computes the Hilbert basis
@@ -94,25 +96,49 @@ This project explores approximation and early-stopping strategies to recover mea
 
 ---
 
+## Subset Selection
+
+We choose some specific subsets of the set of monomers, run normaliz on these subsets and then take union of the output to get 
+a subset of the entire Hilbert Basis.
+
+Motivation: Most of the unsplittable polymers we're interested in don't have a lot of types of monomers. So if we can guarantee that we get all the unsplittable polymers which have at most t types of monomers, it's still a good output! Reduced time is more important than getting all the elements of hilbert basis, majority of which isn't important.
+
+## Covering Designs for Subset Selection
+
+To reduce the number of Normaliz runs, we leverage **covering designs**.
+
+A **covering design C(n, k, t)** is a collection of k-element subsets of a n-element set such that every t-element subset is contained in at least one k-element subset.
+
+**Usage in pipeline:**
+
+1. Instead of enumerating all C(n, k) monomer subsets, we use a covering design for the current `(n, k, t)` parameters.
+2. Only the subsets from the covering design are run through Normaliz.
+3. This guarantees **full coverage of all t-monomer interactions** while dramatically reducing the number of subsets.
+4. Optionally, a **probe phase** runs the first ~100 subsets to estimate whether continuing for this k-value is worthwhile.
+
+**Benefits:**
+
+* Reduces runtime from combinatorial explosion to manageable levels
+* Guarantees that every t-subset of monomers is considered at least once
+* Integrates seamlessly with existing early-stopping / pruning strategies
+
+---
+
 ## Approximation Methods
 
-### Method 1: Monomer-Subset Enumeration
+### Method 1: Monomer-Subset Enumeration with Covering Designs
 
 Instead of running Normaliz on all n monomers:
 
-1. Enumerate all unique subsets of monomers of size k
-2. Run Normaliz on each subset
+1. Load precomputed covering design for the current `(n, k, t)` or generate via greedy algorithm
+2. Run Normaliz on each subset from the covering design
 3. Take the union of the results
-
-**Runtime:**
-
-C(n, k) · T(k)
 
 **Properties:**
 
 * Produces unsplittable polymers involving at most k monomer types
 * Most Hilbert basis elements appear in early iterations
-* Supports early termination
+* Supports early termination if estimated runtime exceeds the current minimum
 
 ---
 
@@ -142,9 +168,30 @@ This method under-approximates the full Hilbert basis due to loss of global bind
 
 ---
 
-## Future Work
+## Future Work/ Todo
 
-* Adaptive subset selection strategies
-* Parallelization of subset enumeration
-* Formal approximation guarantees
-* Improved stopping criteria
+1) Instead of using a locally available database, query the covering design from online if it's fast enough.
+(https://zenodo.org/records/10779737)
+2) Try using the covering design algorithm and see how fast it is (It doesn't have to be the minimal covering design)
+https://github.com/sagemath/sage/blob/develop/src/sage/combinat/designs/covering_design.py
+3) Add flags to the pipeline. (include base case for reference, use online querying (limited to n<100, k<=25, and t<=8),
+modes to shift between types of binding sites and monomer types for covering design, value of k, t, modes to use offline db or 
+)
+4) Add way to jump current iteration without changing the best time. Give some leeway in terms of approx time to account for random spikes.
+
+
+5) Create different types of tbn and test the strategy on them and benchmark it:
+Linear cascade modules, 
+Binary tree topology modules,
+damien tbn,
+randomly generated
+
+Plot estimated and actual runtimes for each tbn varying the value of k.
+
+6) Write the paper
+Start with technical content 
+
+
+Dependancies/Reproducibility:
+
+Need sage and online packages etc

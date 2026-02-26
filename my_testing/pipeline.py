@@ -10,10 +10,10 @@ import math
 # Config
 # -------------------------
 monomer_file = "monomers.txt" 
-k = 7                         # Number of monomers to pick per combination
+k = 7
 max_loops = 100
 python_script = "monomers_to_normaliz.py"
-normaliz_exe = '/Users/archit/Desktop/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz'
+normaliz_exe = '/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz'
 log_file = "benchmark_log.txt"  # Log file path
 hilbert_basis_file = "all_hilbert_basis.txt" 
 

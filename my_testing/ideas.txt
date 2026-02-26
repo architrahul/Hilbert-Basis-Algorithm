@@ -1,13 +1,18 @@
 Covering Design Algorithm
 
-Let the covering number C(n, t, k) denote the smallest number of tsubsets of a n-set that cover all k-subsets.
-
-For a fixed value of k, (k is small) find an optimal t in for which we can apply the covering design algorithm 
-as well as the hilbert basis algorithm in minimum time.
+todo: Merge pipeline 1 and 2 and add flags
 
 
-maybe we run one iteration of each value of t and then 
-since we know the value of C(n, k(the subset size which we're gauranting will be covered), t) we can multiply that time like
- t x C(n, k, t) and find optimized t and run for it.
+start with min k and when lower bound(sample time/100 * CD size) is less than required time, 
+we can runt he whole thing. If the lower bound increases, then we inform and run the thing.
 
-ToDo Merge pipeline 1 and 2 and add flags
+Run benchmarking on randomly generated tbn and the example tbns
+Plot estimated and actual runtimes for each tbn varying the value of k.
+
+Try the binary tree topology modules
+linear cascade
+damien
+
+Plot estimated vs actual times for different modules.
+
+Start with technical content 

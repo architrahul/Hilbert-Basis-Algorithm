@@ -5,24 +5,19 @@ from datetime import datetime
 import os
 from collections import OrderedDict
 
-# -------------------------
-# Config
-# -------------------------
-monomer_file = "monomers.txt"   # Your full monomers file
-k = 9                          # Number of DOMAINS (binding sites) to pick per combination
-python_script = "monomers_to_normaliz.py"  # Path to your conversion script
-normaliz_exe = '/Users/archit/Desktop/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz'
-log_file = "benchmark_log.txt"  # Log file path
-hilbert_basis_file = "all_hilbert_basis.txt"  # File to store all unique Hilbert basis vectors
 
-# Temporary files for each loop
+monomer_file = "monomers.txt"
+k = 9                          # Number of domains (binding sites) to pick per combination
+python_script = "monomers_to_normaliz.py" 
+normaliz_exe = '/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz'
+log_file = "benchmark_log.txt" 
+hilbert_basis_file = "all_hilbert_basis.txt" 
+
 tmp_monomers = "tmp_monomers.txt"
 tmp_vectors = "vectors.txt"
 tmp_eqs = "eqs.in"
 
-# -------------------------
-# Clean up any previous Normaliz output files
-# -------------------------
+
 def cleanup_normaliz_files():
     """Remove all Normaliz output files from previous runs"""
     patterns = ["eqs.out", "eqs.gen", "eqs.inv", "eqs.cst", "eqs.typ", "eqs.egn"]
@@ -33,9 +28,6 @@ def cleanup_normaliz_files():
 # Clean up at the start
 cleanup_normaliz_files()
 
-# -------------------------
-# Read all monomers and extract unique domains
-# -------------------------
 with open(monomer_file, 'r') as f:
     all_monomers = [line.strip() for line in f if line.strip()]
 
@@ -66,9 +58,7 @@ print(f"Domains: {all_domains}")
 if k > n_domains:
     raise ValueError(f"k={k} is larger than total number of domains={n_domains}")
 
-# -------------------------
-# Generate all domain combinations and filter monomers
-# -------------------------
+
 def filter_monomers_by_domains(monomers, selected_domains):
     """
     Return only monomers that contain ONLY the selected domains.
@@ -89,9 +79,7 @@ total_combinations = len(all_domain_combinations)
 # Store all unique Hilbert basis vectors (in original n-dimensional monomer space)
 all_hilbert_vectors = set()
 
-# -------------------------
-# Helper function to read Normaliz output
-# -------------------------
+
 def read_hilbert_basis(base_filename="eqs"):
     """
     Read the Hilbert basis from Normaliz output file (eqs.out).
@@ -108,7 +96,6 @@ def read_hilbert_basis(base_filename="eqs"):
         with open(output_file, 'r') as f:
             lines = f.readlines()
         
-        # Find the line that says "X Hilbert basis elements:"
         hilbert_start = None
         for i, line in enumerate(lines):
             if "Hilbert basis elements:" in line:
@@ -118,19 +105,15 @@ def read_hilbert_basis(base_filename="eqs"):
         if hilbert_start is None:
             return []
         
-        # Read vectors until we hit a blank line or another section
         for i in range(hilbert_start, len(lines)):
             line = lines[i].strip()
             
-            # Stop at empty line or next section
             if not line or line.startswith("***") or "extreme rays" in line.lower():
                 break
             
-            # Skip comment lines
             if line.startswith("#"):
                 continue
             
-            # Parse the vector
             try:
                 vector = [int(x) for x in line.split()]
                 if vector:
@@ -297,9 +280,7 @@ Benchmark completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     log.write(summary)
     print(summary)
 
-# -------------------------
 # Write all Hilbert basis vectors to file
-# -------------------------
 with open(hilbert_basis_file, 'w') as f:
     f.write(f"# Total unique Hilbert basis vectors: {len(all_hilbert_vectors)}\n")
     f.write(f"# Format: space-separated vector in {n_monomers}-dimensional monomer space\n")

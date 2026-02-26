@@ -6,16 +6,15 @@ import os
 import math
 import random
 
-# -------------------------
 # Config
-# -------------------------
+
 monomer_file = "monomers.txt"
-n = 21  # Number of monomers
+n = 41  # Number of monomers
 t = 5   # Fixed: guarantee every 5-subset is covered
-k_values = list(range(21, 4, -1))  # Test k from 21 down to 5
+k_values = list(range(n, n-10, -1))  # Test k from 27 down to 18
 
 python_script = "monomers_to_normaliz.py"
-normaliz_exe = '/Users/archit/Desktop/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz'
+normaliz_exe = '/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz'
 log_file = "vary_k_log.txt"
 
 # Temporary files
