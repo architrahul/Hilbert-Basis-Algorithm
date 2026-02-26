@@ -5,10 +5,6 @@ La Jolla Covering Repository (LJCR).
 
 Features:
 - Resume-safe (can be stopped and restarted)
-- No duplicate inserts
-- Constant memory
-- Indexed for fast runtime access
-- Uses only Python standard library
 """
 
 import urllib.request
@@ -21,7 +17,7 @@ import sys
 # Configuration
 # ----------------------------
 DB_FILE = "coverings.db"
-REQUEST_DELAY = 0.5   # seconds (be polite)
+REQUEST_DELAY = 0.5
 
 V_RANGE = range(2, 100)   # v < 100
 T_RANGE = range(2, 9)     # t <= 8

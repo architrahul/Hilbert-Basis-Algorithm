@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 monomer_file = "monomers.txt"
 python_script = "monomers_to_normaliz.py"
 normaliz_exe = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz"
-log_file = "vary_k_ljcr_log.txt"
+log_file = "covering_design_log.txt"
 
 tmp_monomers = "tmp_monomers.txt"
 tmp_eqs = "eqs.in"
@@ -84,7 +84,7 @@ def fetch_covering_online(v: int, k: int, t: int):
     Raises RuntimeError if no covering is available for the given parameters.
     """
     url = f"https://ljcr.dmgordon.org/show_cover.php?v={v}&k={k}&t={t}"
-    print(f"  Fetching covering C({v},{k},{t}) from {url} ...")
+    print(f"Fetching covering C({v},{k},{t})...")
 
     r = requests.get(
         url,
@@ -104,6 +104,9 @@ def fetch_covering_online(v: int, k: int, t: int):
         row = [int(x) for x in line.split()]
         if row:
             blocks.append(row)
+
+    if not blocks:
+        raise RuntimeError(f"No covering stored online for C({v},{k},{t})")
 
     print(f"  Retrieved {len(blocks)} blocks.")
     return blocks
@@ -144,7 +147,6 @@ def run_for_k_value(k, all_monomers, n, t, min_normaliz_time, log):
 
     num_subsets = len(blocks)
     print(f"Using covering design: {num_subsets} subsets\n")
-    print("Commands during run: 's' = skip current k, 'q' = quit program")
 
     all_hilbert_vectors = set()
     times = []
@@ -240,7 +242,8 @@ def run_for_k_value(k, all_monomers, n, t, min_normaliz_time, log):
     log.write(f"\nk={k}: FULL RUN COMPLETE\n")
     log.write(f"  Number of subsets: {num_subsets}\n")
     log.write(f"  Total Normaliz time: {total_time:.3f}s\n")
-    log.write(f"  Avg Normaliz time per subset: {total_time / num_subsets:.3f}s\n")
+    avg = (total_time / num_subsets) if num_subsets else 0.0
+    log.write(f"  Avg Normaliz time per subset: {avg:.3f}s\n")
     log.write(f"  Unique Hilbert basis vectors: {len(all_hilbert_vectors)}\n")
     log.flush()
 

@@ -1,0 +1,11 @@
+Vary k Benchmark
+Started: 2026-02-25 23:52:30.027096
+n=67, t=5
+k values: [8, 7, 6]
+======================================================================
+
+k=8: SKIPPED (covering unavailable: No covering stored online for C(67,8,5))
+
+k=7: SKIPPED (covering unavailable: No covering stored online for C(67,7,5))
+
+k=6: SKIPPED (covering unavailable: No covering stored online for C(67,6,5))
