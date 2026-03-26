@@ -372,7 +372,4 @@ The trie enforces **local clustering**, making the problem tractable while still
 
 ---
 
-## Status
-
-This is currently a heuristic framework rather than a proven bound-producing construction.
-Its usefulness likely depends on the structural regularity of the starting covering design.
+Building up a covering design from (n, t, t) will give a fixed lower bound.

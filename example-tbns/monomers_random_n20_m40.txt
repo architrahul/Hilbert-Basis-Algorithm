@@ -1,0 +1,41 @@
+# Random TBN 20 domains 40 monomers
+d1 d8*
+d18* d14*
+d7* d20*
+d18* d15 d1
+d14* d5* d11*
+d4* d12 d2 d18* d13*
+d20 d12 d3* d8
+d8 d13*
+d6* d7 d3 d6
+d6* d9 d18*
+d2* d2 d13* d7
+d7 d13 d15* d5*
+d19* d19* d8 d5
+d2 d5
+d20* d13 d15 d18 d1
+d18 d11*
+d6* d9 d6 d4 d10
+d5* d6 d17
+d16* d12 d10* d8
+d3 d3
+d5 d18* d17
+d7 d7 d13 d12* d17*
+d8* d1 d8
+d3 d2*
+d11* d8*
+d7 d19 d8 d14* d4
+d14* d2 d4* d11
+d8* d18*
+d6* d8 d3* d18* d18
+d8* d16*
+d2* d1 d9 d15* d18
+d5* d7 d19 d2 d2*
+d17 d17* d17* d6* d3
+d13* d19* d20*
+d14 d19
+d7 d11* d13* d10*
+d1* d19
+d18* d9*
+d3 d12* d15 d10
+d18* d4

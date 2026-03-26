@@ -1,0 +1,21 @@
+# Random TBN 10 domains 20 monomers
+d1 d4*
+d9* d7*
+d4* d10*
+d9* d8 d1
+d7* d3* d6*
+d2* d6 d1 d9* d7*
+d10 d6 d2* d4
+d4 d7*
+d3* d4 d2 d3
+d3* d5 d9*
+d1* d1 d7* d4
+d4 d7 d8* d3*
+d10* d10* d4 d3
+d1 d3
+d10* d7 d8 d9 d1
+d9 d6*
+d3* d5 d3 d2 d5
+d3* d3 d9
+d8* d6 d5* d4
+d2 d2

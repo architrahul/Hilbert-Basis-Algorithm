@@ -12,7 +12,7 @@ import threading
 
 # Config
 
-monomer_file = "monomers.txt"
+monomer_file = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/monomers.txt"
 python_script = "monomers_to_normaliz.py"
 normaliz_exe = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz"
 # log_file = f"log_{n_for_covering}_{k_start}_{t}.txt" ; defined in main
@@ -496,7 +496,7 @@ def main():
     if include_base == "y" and n_for_covering not in k_values:
         k_values = [n_for_covering] + k_values
 
-    log_file = f"log_{n_for_covering}_{k_start}_{t}.txt"
+    log_file = f"logs/log_{n_for_covering}_{k_start}_{t}.txt"
 
     min_total_time = float("inf")
     results = []
@@ -537,6 +537,8 @@ def main():
         print(f"\nOptimal k = {best['k']} ({best['total_normaliz_time']:.2f}s)")
     else:
         print("\nNo k completed fully.")
+
+    cleanup_normaliz_files()
 
 
 if __name__ == "__main__":
