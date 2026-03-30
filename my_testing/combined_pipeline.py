@@ -12,15 +12,13 @@ import threading
 
 # Config
 
-monomer_file = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/monomers.txt"
+monomer_file = "/Users/archit/Projects/Hilbert Basis Algorithm/example-tbns/damien.tbn"
 python_script = "monomers_to_normaliz.py"
 normaliz_exe = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz"
-# log_file = f"log_{n_for_covering}_{k_start}_{t}.txt" ; defined in main
 
 
 tmp_monomers = "tmp_monomers.txt"
 tmp_eqs = "eqs.in"
-
 
 PROBE_LIMIT = 100
 
@@ -36,27 +34,44 @@ FLAGS
     k domain types; monomers are filtered to those whose domains are all
     within the selected set before running Normaliz.
 
---include-base (NOT IN USE RN)
+--t [int]  (default: 5)
+    The t parameter for the covering design C(n, k, t). Every t-element
+    subset of monomers (or domains, in domain mode) is guaranteed to be
+    covered by at least one block. Must satisfy 1 <= t <= k.
+
+--k-start [int]  (default: 25)
+    The largest value of k to try. The algorithm sweeps k from k-start
+    down to t+1 (inclusive), pruning values that are estimated to be slower
+    than the current best. Must satisfy t < k-start <= n, where n is the
+    number of monomers (monomer mode) or unique domain types (domain mode).
+
+--include-base
     Also run the base case k=n (all monomers or all domains), which gives
-    the exact full Hilbert basis at the cost of the longest runtime.
+    the exact full Hilbert basis.
 
 --fallback-greedy
     If a covering design C(n,k,t) is not found in the online database,
     compute one locally using a greedy set-cover algorithm instead of
-    skipping that k value. Warning: can be slow for large n and k.
+    skipping that k value.
+    Warning: can be slow for large n and k.
+    Note: online lookup is limited to n < 100, k <= 25, t <= 8.
 
 --tolerance [float]  (default: 1.0)
     Pruning leeway multiplier. A k value is only pruned if:
         estimated_total_time > best_time_so_far * tolerance
-    E.g. --tolerance 1.2 allows up to 20% slack before pruning,
-    which helps avoid premature pruning due to random timing spikes.
+    Must be >= 1.0. E.g. --tolerance 1.2 allows up to 20% slack before
+    pruning, which helps avoid premature pruning due to random timing spikes.
+    As noted in the paper, larger tolerance reduces the risk of missing the
+    optimal k at the cost of exploring more values.
 
-Interative  (during run)
-----------------------------------
+Interactive (during run)
+------------------------
 s   Skip the current k value immediately (does not update best time).
 """
 
+# -------------------------
 # Utility functions
+# -------------------------
 
 def cleanup_normaliz_files():
     patterns = ["eqs.out", "eqs.gen", "eqs.inv", "eqs.cst", "eqs.typ", "eqs.egn"]
@@ -116,6 +131,7 @@ def expand_vector_to_full_monomer_space(reduced_vector, filtered_monomers_indice
             full_vector[idx] = monomer_part[i]
     return tuple(full_vector)
 
+
 _skip_current = False
 
 def _listen_for_skip():
@@ -135,6 +151,8 @@ def check_and_clear_skip() -> bool:
         _skip_current = False
         return True
     return False
+
+
 # -------------------------
 # Domain helpers (for domain mode)
 # -------------------------
@@ -163,7 +181,7 @@ def filter_monomers_by_domains(monomers: list[str], selected_domains: list[str])
 
 def fetch_covering_online(v: int, k: int, t: int) -> list[list[int]]:
     url = f"https://ljcr.dmgordon.org/show_cover.php?v={v}&k={k}&t={t}"
-    print(f"Fetching covering C({v},{k},{t})...")
+    print(f"Fetching covering C({v},{k},{t}) from La Jolla Covering Repository...")
 
     r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
     r.raise_for_status()
@@ -247,7 +265,7 @@ def load_covering_blocks(v: int, k: int, t: int, fallback_greedy: bool = False):
 # Core pipeline: MONOMER MODE
 # -------------------------
 
-def run_for_k_value_monomer(k, all_monomers, n, t, min_normaliz_time, log, fallback_greedy, tolerance):
+def run_for_k_value_monomer(k, all_monomers, n, t, min_total_time, log, fallback_greedy, tolerance):
     """
     Covering design over monomers: each block is a k-subset of monomer indices.
     Runs Normaliz on each subset of monomers directly.
@@ -262,10 +280,10 @@ def run_for_k_value_monomer(k, all_monomers, n, t, min_normaliz_time, log, fallb
         print(f"Skipping k={k}: {e}")
         log.write(f"\nk={k}: SKIPPED (covering unavailable: {e})\n")
         log.flush()
-        return None, min_normaliz_time
+        return None, min_total_time
 
     num_subsets = len(blocks)
-    print(f"Using covering design: {num_subsets} subsets\n")
+    print(f"Using covering design C({n},{k},{t}): {num_subsets} blocks\n")
 
     all_hilbert_vectors: set[tuple[int, ...]] = set()
     times = []
@@ -280,20 +298,21 @@ def run_for_k_value_monomer(k, all_monomers, n, t, min_normaliz_time, log, fallb
             estimated_total = avg_time * num_subsets
             print(f"Probe complete: avg={avg_time:.3f}s, estimated total={estimated_total:.2f}s")
 
-            if estimated_total > min_normaliz_time * tolerance:
-                print(f"PRUNED k={k}: estimated {estimated_total:.2f}s > best {min_normaliz_time:.2f}s * tolerance {tolerance}")
+            if estimated_total > min_total_time * tolerance:
+                print(f"PRUNED k={k}: estimated {estimated_total:.2f}s > best {min_total_time:.2f}s * tolerance {tolerance}")
                 log.write(f"\nk={k}: PRUNED\n"
                           f"  Probe time: {probe_time:.3f}s for {probe_size} subsets\n"
-                          f"  Estimated: {estimated_total:.2f}s vs best {min_normaliz_time:.2f}s * tolerance {tolerance}\n")
+                          f"  Estimated: {estimated_total:.2f}s vs best {min_total_time:.2f}s * tolerance {tolerance}\n")
                 log.flush()
-                return None, min_normaliz_time
+                return None, min_total_time
 
         for idx in index_range:
             if check_and_clear_skip():
                 print(f"Skipping k={k} by user request.")
                 log.write(f"\nk={k}: SKIPPED by user\n")
                 log.flush()
-                return None, min_normaliz_time
+                return None, min_total_time
+
             block = blocks[idx]
             cleanup_normaliz_files()
 
@@ -323,7 +342,7 @@ def run_for_k_value_monomer(k, all_monomers, n, t, min_normaliz_time, log, fallb
 # -------------------------
 
 def run_for_k_value_domain(k, all_monomers, all_domains, n_domains, n_monomers,
-                            t, min_normaliz_time, log, fallback_greedy, tolerance):
+                            t, min_total_time, log, fallback_greedy, tolerance):
     """
     Covering design over binding site types (domains): each block is a k-subset
     of domain indices. Monomers are filtered to only those whose domains are all
@@ -339,10 +358,10 @@ def run_for_k_value_domain(k, all_monomers, all_domains, n_domains, n_monomers,
         print(f"Skipping k={k}: {e}")
         log.write(f"\nk={k}: SKIPPED (covering unavailable: {e})\n")
         log.flush()
-        return None, min_normaliz_time
+        return None, min_total_time
 
     num_subsets = len(blocks)
-    print(f"Using covering design: {num_subsets} subsets\n")
+    print(f"Using covering design C({n_domains},{k},{t}): {num_subsets} blocks\n")
 
     all_hilbert_vectors: set[tuple[int, ...]] = set()
     times = []
@@ -357,26 +376,25 @@ def run_for_k_value_domain(k, all_monomers, all_domains, n_domains, n_monomers,
             estimated_total = avg_time * num_subsets
             print(f"Probe complete: avg={avg_time:.3f}s, estimated total={estimated_total:.2f}s")
 
-            if estimated_total > min_normaliz_time * tolerance:
-                print(f"PRUNED k={k}: estimated {estimated_total:.2f}s > best {min_normaliz_time:.2f}s * tolerance {tolerance}")
+            if estimated_total > min_total_time * tolerance:
+                print(f"PRUNED k={k}: estimated {estimated_total:.2f}s > best {min_total_time:.2f}s * tolerance {tolerance}")
                 log.write(f"\nk={k}: PRUNED\n"
                           f"  Probe time: {probe_time:.3f}s for {probe_size} subsets\n"
-                          f"  Estimated: {estimated_total:.2f}s vs best {min_normaliz_time:.2f}s * tolerance {tolerance}\n")
+                          f"  Estimated: {estimated_total:.2f}s vs best {min_total_time:.2f}s * tolerance {tolerance}\n")
                 log.flush()
-                return None, min_normaliz_time
+                return None, min_total_time
 
         for idx in index_range:
             if check_and_clear_skip():
                 print(f"Skipping k={k} by user request.")
                 log.write(f"\nk={k}: SKIPPED by user\n")
                 log.flush()
-                return None, min_normaliz_time
+                return None, min_total_time
+
             block = blocks[idx]
             cleanup_normaliz_files()
 
-            # Convert 1-indexed block to domain names
             selected_domains = [all_domains[i - 1] for i in block]
-
             filtered_monomers = filter_monomers_by_domains(all_monomers, selected_domains)
             if not filtered_monomers:
                 continue
@@ -433,37 +451,169 @@ def _finish_run(k, num_subsets, times, all_hilbert_vectors, log):
 
 
 # -------------------------
+# Flag validation
+# -------------------------
+
+def validate_args(args, n_monomers, n_domains):
+    """
+    Validate all flag combinations and emit descriptive error messages.
+    n is the size of the covering design universe (monomers or domains).
+    """
+    errors = []
+    n = n_monomers if args.mode == "monomer" else n_domains
+
+    # --t
+    if args.t < 1:
+        errors.append(
+            f"--t must be at least 1 (got {args.t}).\n"
+            f"  t is the covering strength: every t-element subset of the\n"
+            f"  {'monomers' if args.mode == 'monomer' else 'domain types'} "
+            f"  is guaranteed to appear in at least one block."
+        )
+
+    # --k-start
+    if args.k_start < args.t + 1:
+        errors.append(
+            f"--k-start must be strictly greater than t (got k-start={args.k_start}, t={args.t}).\n"
+            f"  The algorithm sweeps k from k-start down to t+1; if k-start <= t there\n"
+            f"  are no k values to try. Use --k-start >= {args.t + 1}."
+        )
+    if args.k_start > n:
+        errors.append(
+            f"--k-start cannot exceed n={n} (got {args.k_start}), the number of\n"
+            f"  {'monomers' if args.mode == 'monomer' else 'unique domain types'} "
+            f"  in the input.\n"
+            f"  Each block is a k-subset of these {n} elements, so k <= n is required.\n"
+            f"  Use --k-start <= {n}."
+        )
+
+    # --tolerance
+    if args.tolerance < 1.0:
+        errors.append(
+            f"--tolerance must be >= 1.0 (got {args.tolerance}).\n"
+            f"  A value of 1.0 means a k value is pruned as soon as its estimated\n"
+            f"  total time exceeds the current best; values > 1.0 add proportional\n"
+            f"  slack (e.g. 1.2 allows 20%% extra time before pruning).\n"
+            f"  Values below 1.0 would prune the current best itself."
+        )
+
+    # Online repository limits
+    if not args.fallback_greedy:
+        if n >= 100 or args.k_start > 25 or args.t > 8:
+            issues = []
+            if n >= 100:
+                issues.append(f"n={n} >= 100")
+            if args.k_start > 25:
+                issues.append(f"k-start={args.k_start} > 25")
+            if args.t > 8:
+                issues.append(f"t={args.t} > 8")
+            errors.append(
+                f"The La Jolla Covering Repository only stores designs for\n"
+                f"  n < 100, k <= 25, t <= 8, but your parameters include: {', '.join(issues)}.\n"
+                f"  Add --fallback-greedy to compute covering designs locally when\n"
+                f"  the online lookup fails."
+            )
+
+    if errors:
+        print("\nError: invalid flag combination(s):\n")
+        for i, msg in enumerate(errors, 1):
+            print(f"  [{i}] {msg}\n")
+        sys.exit(1)
+
+
+# -------------------------
 # Main
 # -------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Vary-k Hilbert basis pipeline")
+    parser = argparse.ArgumentParser(
+        description="Covering Design Strategy for Pareto-Optimal Polymer Enumeration",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python covering_pipeline.py --t 3 --k-start 10\n"
+            "  python covering_pipeline.py --t 5 --k-start 20 --mode domain --tolerance 1.2\n"
+            "  python covering_pipeline.py --t 4 --k-start 30 --fallback-greedy --include-base\n\n"
+            "During a run, type 's' and press Enter to skip the current k value."
+        )
+    )
+
+    parser.add_argument(
+        "--t",
+        type=int,
+        default=5,
+        metavar="INT",
+        help=(
+            "Covering strength: every t-element subset of monomers (monomer mode) "
+            "or domain types (domain mode) is covered by at least one block. "
+            "Must satisfy 1 <= t < k-start. Default: 5."
+        )
+    )
+    parser.add_argument(
+        "--k-start",
+        type=int,
+        default=25,
+        metavar="INT",
+        dest="k_start",
+        help=(
+            "Largest block size k to try. The algorithm sweeps k from k-start "
+            "down to t+1, pruning values estimated to be slower than the current best. "
+            "Must satisfy t < k-start <= n, where n is the number of monomers "
+            "(monomer mode) or unique domain types (domain mode). Default: 25."
+        )
+    )
+    parser.add_argument(
+        "--include-base",
+        action="store_true",
+        dest="include_base",
+        help=(
+            "Also run the base case k=n (all monomers or all domain types), "
+            "which recovers the exact full Hilbert basis P* at the cost of "
+            "the longest possible runtime."
+        )
+    )
     parser.add_argument(
         "--fallback-greedy",
         action="store_true",
-        help="Compute covering locally if not found online."
+        dest="fallback_greedy",
+        help=(
+            "If a covering design C(n,k,t) is not found in the La Jolla Covering "
+            "Repository (which only stores n < 100, k <= 25, t <= 8), compute one "
+            "locally using a greedy set-cover algorithm. Can be slow for large n and k."
+        )
     )
     parser.add_argument(
         "--mode",
         choices=["monomer", "domain"],
         default="monomer",
         help=(
-            "'monomer' (default): covering design over monomer subsets. "
-            "'domain': covering design over binding-site-type subsets; "
-            "monomers are filtered to those using only the selected domains."
+            "'monomer' (default): covering design over monomer subsets; each block "
+            "is a k-subset of monomers and Normaliz is run on those monomers directly. "
+            "'domain': covering design over binding-site types; each block selects k "
+            "domain types and monomers are filtered to those whose domains all lie "
+            "within the selected set. Domain mode may be faster when many monomers "
+            "share the same domain types (e.g. cascade or binary-tree TBNs)."
         )
     )
     parser.add_argument(
         "--tolerance",
         type=float,
         default=1.0,
-        help="Pruning tolerance multiplier. Only prune if estimated_time > best_time * tolerance. "
-            "Default 1.0 (no leeway). E.g. 1.2 allows 20%% slack before pruning."
+        metavar="FLOAT",
+        help=(
+            "Pruning tolerance multiplier (>= 1.0). A candidate k is pruned only if "
+            "its estimated total runtime exceeds best_so_far * tolerance. "
+            "1.0 (default) prunes as soon as the estimate exceeds the best; "
+            "1.2 allows 20%% slack, reducing the risk of premature pruning due to "
+            "timing variance at the cost of exploring more k values."
+        )
     )
+
     args = parser.parse_args()
 
     cleanup_normaliz_files()
 
+    # Load monomers
     all_monomers = []
     with open(monomer_file, "r") as f:
         for line in f:
@@ -481,45 +631,50 @@ def main():
 
     print(f"\nDetected {n_monomers} monomers, {n_domains} unique binding site types")
     print(f"Mode: {args.mode}")
-    print(f"Greedy fallback: {'ENABLED' if args.fallback_greedy else 'DISABLED'}")
-    print(f"Note: Online covering lookup is limited to n < 100, k ≤ 25, t ≤ 8\n")
 
-    # n for the covering design depends on mode
+    # Validate after loading input so n is known
+    validate_args(args, n_monomers, n_domains)
+
     n_for_covering = n_monomers if args.mode == "monomer" else n_domains
 
-    t = int(input("Enter value of t (default=5): ") or 5)
-    k_start = int(input(f"Enter starting k (≤ {n_for_covering})\nk decreases from starting value to t\n(default 25)): ").strip() or 25)
-    include_base = input(f"Include base case k={n_for_covering}? (y/n, default=n): ").strip().lower() or "n"
-    start_input_listener()
-
-    k_values = list(range(k_start, t, -1))
-    if include_base == "y" and n_for_covering not in k_values:
+    k_values = list(range(args.k_start, args.t, -1))
+    if args.include_base and n_for_covering not in k_values:
         k_values = [n_for_covering] + k_values
 
-    log_file = f"logs/log_{n_for_covering}_{k_start}_{t}.txt"
+    print(f"Sweeping k in: {k_values}")
+    print(f"t={args.t}, tolerance={args.tolerance}, fallback-greedy={args.fallback_greedy}\n")
+
+    os.makedirs("logs", exist_ok=True)
+    log_file = f"logs/log_{n_for_covering}_{args.k_start}_{args.t}.txt"
 
     min_total_time = float("inf")
     results = []
 
+    start_input_listener()
+
     with open(log_file, "a") as log:
-        log.write(f"Vary k Benchmark\n"
-                  f"Started: {datetime.now()}\n"
-                  f"Mode: {args.mode}\n"
-                  f"n_monomers={n_monomers}, n_domains={n_domains}, t={t}\n"
-                  f"k values: {k_values}\n"
-                  f"Greedy fallback: {args.fallback_greedy}\n"
-                  + "="*70 + "\n")
+        log.write(
+            f"Covering Design Strategy — Pareto-Optimal Polymer Enumeration\n"
+            f"Started: {datetime.now()}\n"
+            f"Mode: {args.mode}\n"
+            f"n_monomers={n_monomers}, n_domains={n_domains}\n"
+            f"t={args.t}, k_start={args.k_start}, include_base={args.include_base}\n"
+            f"tolerance={args.tolerance}, fallback_greedy={args.fallback_greedy}\n"
+            f"k values: {k_values}\n"
+            + "=" * 70 + "\n"
+        )
 
         try:
             for k in k_values:
                 if args.mode == "monomer":
                     result, new_time = run_for_k_value_monomer(
-                        k, all_monomers, n_monomers, t, min_total_time, log, args.fallback_greedy, args.tolerance
+                        k, all_monomers, n_monomers, args.t,
+                        min_total_time, log, args.fallback_greedy, args.tolerance
                     )
                 else:
                     result, new_time = run_for_k_value_domain(
                         k, all_monomers, all_domains, n_domains, n_monomers,
-                        t, min_total_time, log, args.fallback_greedy, args.tolerance
+                        args.t, min_total_time, log, args.fallback_greedy, args.tolerance
                     )
 
                 if result is None:
@@ -530,13 +685,17 @@ def main():
                     min_total_time = new_time
 
         except KeyboardInterrupt:
+            print("\nInterrupted by user.")
+            log.write("\nRun interrupted by user (KeyboardInterrupt).\n")
             log.flush()
 
     if results:
         best = min(results, key=lambda r: r["total_normaliz_time"])
-        print(f"\nOptimal k = {best['k']} ({best['total_normaliz_time']:.2f}s)")
+        print(f"\nBest k = {best['k']} with total Normaliz time {best['total_normaliz_time']:.2f}s "
+              f"({best['unique_vectors']} unique Pareto-optimal polymers found)")
     else:
-        print("\nNo k completed fully.")
+        print("\nNo k value completed fully. "
+              "Try increasing --tolerance, lowering --k-start, or adding --fallback-greedy.")
 
     cleanup_normaliz_files()
 
