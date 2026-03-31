@@ -1,162 +1,375 @@
-Basic Algorithm to calculate hilbert basis: Project1
-To make project1 executable: clang++ -std=c++11 -o hilbert1 project1.cxx
-To run project1 executable: ./hilbert1
+# Enumerating Unsplittable Polymers via Hilbert Basis Computation
 
-Modified algorithm to calc hilber basis(not sure if it works): Project2
-To make project2 executable: clang++ -std=c++11 -o hilbert2 project2.cxx
-To run project2 executable: ./hilbert2
-To do: figure out why it's slower than normal algorithm and add debug statements
+This project studies the combinatorial structure of polymers formed from monomers with complementary binding sites. The goal is to enumerate all **unsplittable polymers** that can be formed from a given mixture of monomers. The problem is formulated as a **Hilbert basis computation** and solved using **Normaliz**, with additional strategies to mitigate scalability issues.
 
-Output:
---- Level 1 ---
-Current Combination: (1, 0, 0, 0)
-  Frozen States (from parent pair): (F, T, T, T)
-  Possible Paths (evaluating from current combination):
-    Path 0: NO NEG DOT PRODUCT
-    Path 1: FROZEN (from parent)
-    Path 2: FROZEN (from parent)
-    Path 3: FROZEN (from parent)
-Current Combination: (0, 1, 0, 0)
-  Frozen States (from parent pair): (F, F, T, T)
-  Possible Paths (evaluating from current combination):
-    Path 0: AVAILABLE
-    Path 1: NO NEG DOT PRODUCT
-    Path 2: FROZEN (from parent)
-    Path 3: FROZEN (from parent)
-    Taking path 0. New Combination: (1, 1, 0, 0)
-      New Frozen States for next level: (F, F, T, T)
-Current Combination: (0, 0, 1, 0)
-  Frozen States (from parent pair): (F, F, F, T)
-  Possible Paths (evaluating from current combination):
-    Path 0: NO NEG DOT PRODUCT
-    Path 1: AVAILABLE
-    Path 2: NO NEG DOT PRODUCT
-    Path 3: FROZEN (from parent)
-    Taking path 1. New Combination: (0, 1, 1, 0)
-      New Frozen States for next level: (F, F, F, T)
-Current Combination: (0, 0, 0, 1)
-  Frozen States (from parent pair): (F, F, F, F)
-  Possible Paths (evaluating from current combination):
-    Path 0: NO NEG DOT PRODUCT
-    Path 1: AVAILABLE
-    Path 2: AVAILABLE
-    Path 3: NO NEG DOT PRODUCT
-    Taking path 2. New Combination: (0, 0, 1, 1)
-      New Frozen States for next level: (F, F, F, F)
-    Taking path 1. New Combination: (0, 1, 0, 1)
-      New Frozen States for next level: (F, F, T, F)
+---
 
---- Level 2 ---
-Current Combination: (1, 1, 0, 0)
-  Frozen States (from parent pair): (F, F, T, T)
-  Possible Paths (evaluating from current combination):
-    Path 0: AVAILABLE
-    Path 1: NO NEG DOT PRODUCT
-    Path 2: FROZEN (from parent)
-    Path 3: FROZEN (from parent)
-    Taking path 0. New Combination: (2, 1, 0, 0)
-      New Frozen States for next level: (F, F, T, T)
-Current Combination: (0, 1, 1, 0)
-  Frozen States (from parent pair): (F, F, F, T)
-  Possible Paths (evaluating from current combination):
-    Path 0: AVAILABLE
-    Path 1: NO NEG DOT PRODUCT
-    Path 2: NO NEG DOT PRODUCT
-    Path 3: FROZEN (from parent)
-    Taking path 0. New Combination: (1, 1, 1, 0)
-      New Frozen States for next level: (F, F, F, T)
-Current Combination: (0, 0, 1, 1)
-  Frozen States (from parent pair): (F, F, F, F)
-  Possible Paths (evaluating from current combination):
-    Path 0: NO NEG DOT PRODUCT
-    Path 1: AVAILABLE
-    Path 2: NO NEG DOT PRODUCT
-    Path 3: NO NEG DOT PRODUCT
-    Taking path 1. New Combination: (0, 1, 1, 1)
-      New Frozen States for next level: (F, F, F, F)
-Current Combination: (0, 1, 0, 1)
-  Frozen States (from parent pair): (F, F, T, F)
-  Possible Paths (evaluating from current combination):
-    Path 0: NO NEG DOT PRODUCT
-    Path 1: NO NEG DOT PRODUCT
-    Path 2: FROZEN (from parent)
-    Path 3: NO NEG DOT PRODUCT
+## Background
 
---- Level 3 ---
-Current Combination: (2, 1, 0, 0)
-  Frozen States (from parent pair): (F, F, T, T)
-  Possible Paths (evaluating from current combination):
-    Path 0: NO NEG DOT PRODUCT
-    Path 1: NO NEG DOT PRODUCT
-    Path 2: FROZEN (from parent)
-    Path 3: FROZEN (from parent)
-Current Combination: (1, 1, 1, 0)
-  Frozen States (from parent pair): (F, F, F, T)
-  Possible Paths (evaluating from current combination):
-    Path 0: AVAILABLE
-    Path 1: NO NEG DOT PRODUCT
-    Path 2: NO NEG DOT PRODUCT
-    Path 3: FROZEN (from parent)
-    Taking path 0. New Combination: (2, 1, 1, 0)
-      New Frozen States for next level: (F, F, F, T)
-Current Combination: (0, 1, 1, 1)
-  Frozen States (from parent pair): (F, F, F, F)
-  --> Added to Hilbert Basis.
+### Binding Sites
 
---- Level 4 ---
-Current Combination: (2, 1, 1, 0)
-  Frozen States (from parent pair): (F, F, F, T)
-  Possible Paths (evaluating from current combination):
-    Path 0: NO NEG DOT PRODUCT
-    Path 1: AVAILABLE
-    Path 2: NO NEG DOT PRODUCT
-    Path 3: FROZEN (from parent)
-    Taking path 1. New Combination: (2, 2, 1, 0)
-      New Frozen States for next level: (F, F, F, T)
+Each binding site type appears in complementary pairs:
 
---- Level 5 ---
-Current Combination: (2, 2, 1, 0)
-  Frozen States (from parent pair): (F, F, F, T)
-  Possible Paths (evaluating from current combination):
-    Path 0: AVAILABLE
-    Path 1: NO NEG DOT PRODUCT
-    Path 2: NO NEG DOT PRODUCT
-    Path 3: FROZEN (from parent)
-    Taking path 0. New Combination: (3, 2, 1, 0)
-      New Frozen States for next level: (F, F, F, T)
+* `a` and `a*`
+* `b` and `b*`
+* etc.
 
---- Level 6 ---
-Current Combination: (3, 2, 1, 0)
-  Frozen States (from parent pair): (F, F, F, T)
-  Possible Paths (evaluating from current combination):
-    Path 0: AVAILABLE
-    Path 1: NO NEG DOT PRODUCT
-    Path 2: NO NEG DOT PRODUCT
-    Path 3: FROZEN (from parent)
-    Taking path 0. New Combination: (4, 2, 1, 0)
-      New Frozen States for next level: (F, F, F, T)
+A binding site can bind only to its complementary type.
 
---- Level 7 ---
-Current Combination: (4, 2, 1, 0)
-  Frozen States (from parent pair): (F, F, F, T)
-  --> Added to Hilbert Basis.
+---
 
---- No more vectors to process. Algorithm finished. ---
+### Monomers
 
-Hilbert Basis:
-(0, 1, 1, 1)
-(4, 2, 1, 0)
+A **monomer** is composed of binding sites and is represented as an integer vector over all binding site types.
 
-Execution time: 473 microseconds (0.473 milliseconds)
+* Positive entries represent a binding site (e.g., `a`)
+* Negative entries represent its complement (e.g., `a*`)
+* Zero represents absence
 
-David's Algorithm
-To make project3 executable: clang++ -std=c++11 -o hilbert3 project3.cxx
-To run project3 executable: ./hilbert3
+#### Example
+
+Binding site types:
+
+a b c d e
+
+Monomers:
+
+a  b  c  d  e
+a* b* c* d*
+b* c* d* e*
+
+Vector representations:
+
+< 1,  1,  1,  1,  1>
+<-1, -1, -1, -1,  0>
+< 0, -1, -1, -1, -1>
+
+---
+
+### Polymers
+
+A **polymer** is a multiset of monomers and is represented as a nonnegative integer vector indicating the multiplicity of each monomer.
+
+---
+
+### Complementarity and Unsplittability
+
+* Two polymers are **complementary** if they contain at least one complementary binding site pair (e.g., `a` and `a*`).
+* A polymer is **unsplittable** if every possible partition of it into two smaller polymers results in complementary polymers.
+
+Unsplittable polymers are irreducible assemblies.
+
+---
+
+## Mathematical Formulation
+
+Let each monomer be a vector in Z^d, where d is the number of binding site types.
+
+The set of all polymers forms an affine monoid generated by these vectors.
+The **unsplittable polymers correspond exactly to the Hilbert basis** of this monoid.
+
+---
+
+## Toolchain
+
+This project uses **Normaliz** for Hilbert basis computation.
+
+### Pipeline
+
+```bash
+python monomers_to_normaliz.py
+../normaliz --verbose -N eqs
+python normaliz_to_monomers.py
+```
+
+1. `monomers_to_normaliz.py` converts monomer vectors into a Normaliz input file (`eqs.in`)
+2. `normaliz` computes the Hilbert basis
+3. `normaliz_to_monomers.py` converts the output back into polymer representations
+
+---
+
+## Scalability Challenge
+
+For large monomer sets, the Hilbert basis can grow extremely large, making Normaliz computationally expensive.
+
+This project explores approximation and early-stopping strategies to recover meaningful subsets of the Hilbert basis efficiently.
+
+---
+
+## Subset Selection
+
+We choose some specific subsets of the set of monomers, run normaliz on these subsets and then take union of the output to get 
+a subset of the entire Hilbert Basis.
+
+Motivation: Most of the unsplittable polymers we're interested in don't have a lot of types of monomers. So if we can guarantee that we get all the unsplittable polymers which have at most t types of monomers, it's still a good output! Reduced time is more important than getting all the elements of hilbert basis, majority of which isn't important.
+
+## Covering Designs for Subset Selection
+
+To reduce the number of Normaliz runs, we leverage **covering designs**.
+
+A **covering design C(n, k, t)** is a collection of k-element subsets of a n-element set such that every t-element subset is contained in at least one k-element subset.
+
+**Usage in pipeline:**
+
+1. Instead of enumerating all C(n, k) monomer subsets, we use a covering design for the current `(n, k, t)` parameters.
+2. Only the subsets from the covering design are run through Normaliz.
+3. This guarantees **full coverage of all t-monomer interactions** while dramatically reducing the number of subsets.
+4. Optionally, a **probe phase** runs the first ~100 subsets to estimate whether continuing for this k-value is worthwhile.
+
+**Benefits:**
+
+* Reduces runtime from combinatorial explosion to manageable levels
+* Guarantees that every t-subset of monomers is considered at least once
+* Integrates seamlessly with existing early-stopping / pruning strategies
+
+---
+
+## Approximation Methods
+
+### Method 1: Monomer-Subset Enumeration with Covering Designs
+
+Instead of running Normaliz on all n monomers:
+
+1. Load precomputed covering design for the current `(n, k, t)` or generate via greedy algorithm
+2. Run Normaliz on each subset from the covering design
+3. Take the union of the results
+
+**Properties:**
+
+* Produces unsplittable polymers involving at most k monomer types
+* Most Hilbert basis elements appear in early iterations
+* Supports early termination if estimated runtime exceeds the current minimum
+
+---
+
+### Method 2: Binding-Site-Subset Enumeration
+
+Instead of restricting monomers, restrict binding site types:
+
+1. Choose all subsets of k binding site types
+2. Project monomers onto these sites (ignore all others)
+3. Run Normaliz on each projection
+4. Collect all resulting unsplittable polymers
+
+**Properties:**
+
+* Produces polymers involving at most k binding site types
+* Resulting Hilbert basis is significantly smaller even for large k
+
+**Limitation:**
+This method under-approximates the full Hilbert basis due to loss of global binding constraints.
+
+---
+
+## Requirements
+
+* Python 3
+* Normaliz (installed and accessible as `normaliz`)
+
+---
+
+## Future Work/ Todo
+
+1) Instead of using a locally available database, query the covering design from online if it's fast enough.
+(https://zenodo.org/records/10779737)
+
+^ DONE
+
+2) Try using the covering design algorithm and see how fast it is (It doesn't have to be the minimal covering design)
+https://github.com/sagemath/sage/blob/develop/src/sage/combinat/designs/covering_design.py
+
+^ PYTHON IMPLEMENTATION INSTEAD OF SAGE
+
+3) Add flags to the pipeline. (include base case for reference, use online querying (limited to n<100, k<=25, and t<=8),
+modes to shift between types of binding sites and monomer types for covering design, value of k, t, modes to use offline db or 
+)
 
 
-TO DO: Add a parser
-Make naive algorithm working
+4) Add way to jump current iteration without changing the best time. Give some leeway in terms of approx time to account for random spikes.
 
-TO DO
 
-0000010000
+5) Create different types of tbn and test the strategy on them and benchmark it:
+Linear cascade modules, 
+Binary tree topology modules,
+damien tbn,
+randomly generated
+
+Plot estimated and actual runtimes for each tbn varying the value of k.
+
+6) Write the paper
+Start with technical content 
+
+
+Dependancies/Reproducibility:
+
+Need sage and online packages etc
+
+
+# Trie-Based Compression Heuristic for Expanding Covering Designs
+
+## Problem Setting
+
+Let ( V = [n] ) be a ground set of size ( n ).
+A covering design ( \mathcal{F} \subseteq \binom{V}{k} ) is said to be an **((n,k,t))-covering design** if every (t)-subset of (V) is contained in at least one block (B \in \mathcal{F}).
+
+We assume an existing ((n,k,t))-covering design is known, and we wish to construct a (not necessarily optimal) ((n,k+\Delta k,t))-covering design while attempting to **reduce the number of blocks** using structural information from the original family.
+
+---
+
+## Key Observation (Monotonicity of Coverage)
+
+If a block (B) covers a (t)-subset (T), then any superset (B' \supseteq B) also covers (T).
+
+Therefore, replacing blocks by carefully chosen **unions of overlapping blocks** preserves the covering property.
+
+---
+
+## Trie Representation of the Design
+
+We represent the family ( \mathcal{F} ) as a **prefix tree (trie)**:
+
+* Each block ( B = {a_1 < a_2 < \dots < a_k} ) is stored as an increasing sequence.
+* Level (i) of the trie corresponds to the (i)-th smallest element.
+* A root-to-leaf path represents one block.
+* The height of the trie is (k).
+* Leaves are in one-to-one correspondence with the blocks of ( \mathcal{F} ).
+
+This representation exposes **shared structure** among highly overlapping blocks.
+
+---
+
+## Local Structure at Level (k-1)
+
+A node at level (k-1) corresponds to a common prefix
+
+[
+P = {a_1,\dots,a_{k-1}}.
+]
+
+Its children correspond to blocks of the form
+
+[
+B_i = P \cup {x_i}.
+]
+
+These blocks differ in only one element and thus have very large intersection.
+
+---
+
+## Compression Idea
+
+If such a node has (m) children, we may replace those (m) blocks with their union:
+
+[
+U = \bigcup_{i=1}^m B_i = P \cup {x_1,\dots,x_m}.
+]
+
+Then
+
+[
+|U| = (k-1) + m.
+]
+
+If
+
+[
+m \le \Delta k,
+]
+
+we have
+
+[
+|U| \le k + \Delta k - 1,
+]
+
+and we can arbitrarily add elements (if necessary) to obtain a block of size exactly (k+\Delta k).
+
+---
+
+## Why Coverage Is Preserved
+
+Each removed block (B_i) satisfies
+
+[
+B_i \subseteq U.
+]
+
+Thus any (t)-subset previously covered by (B_i) remains covered by (U).
+This follows directly from monotonicity.
+
+Therefore, replacing ( {B_1,\dots,B_m} ) by (U) maintains the covering property.
+
+---
+
+## Resulting Heuristic
+
+We obtain a deterministic compression algorithm:
+
+### Algorithm Sketch
+
+```
+Input: (n,k,t)-covering design F, expansion parameter Δk
+Output: A valid (n,k+Δk,t)-covering design F'
+
+1. Build trie representation of F.
+2. For each node P at level k−1:
+       Let children correspond to blocks {B1,...,Bm}.
+       If m ≤ Δk:
+            Replace {B1,...,Bm} with U = ⋃ Bi.
+            Pad U (if necessary) to size k+Δk.
+3. Keep all remaining blocks (extend them arbitrarily to size k+Δk).
+4. Return the modified family.
+```
+
+---
+
+## Interpretation
+
+This method performs **local block coalescence**:
+
+* Highly overlapping blocks are clustered.
+* Each cluster is replaced by a single larger block.
+* The process is polynomial-time and purely combinatorial.
+* No global optimization (e.g., solving Set Cover) is attempted.
+
+---
+
+## What This Is (and Is Not)
+
+### ✔ Provides
+
+* A deterministic way to lift designs from (k) to (k+\Delta k).
+* A structure-aware reduction in block count when overlap is high.
+* A tractable alternative to recomputing a covering design from scratch.
+
+### ✘ Does Not Guarantee
+
+* Minimality of the resulting design.
+* Optimal compression (global merging is NP-hard).
+* Improvement when the original design lacks prefix clustering.
+
+---
+
+## Conceptual View
+
+The method can be viewed as solving a restricted version of:
+
+[
+\text{Cluster blocks } C_1,\dots,C_r \text{ such that }
+\left|\bigcup_{B\in C_i} B\right| \le k+\Delta k.
+]
+
+The trie enforces **local clustering**, making the problem tractable while still exploiting combinatorial overlap.
+
+---
+
+## Possible Directions for Analysis
+
+* Bounding achievable compression under random or extremal constructions.
+* Comparing with known asymptotics of (C(n,k,t)).
+* Studying alternative clustering rules beyond shared prefixes.
+* Viewing the method as a constrained hypergraph coarsening operation.
+
+---
+
+Building up a covering design from (n, t, t) will give a fixed lower bound.
