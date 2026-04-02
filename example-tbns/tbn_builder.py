@@ -53,6 +53,56 @@ def generate_cascade(n: int) -> list[str]:
 
     return monomers
 
+# DNA Strand Displacement TBNs
+
+def generate_dna_tbn(depth: int) -> list[str]:
+    monomers = []
+
+    def signal(name):
+        return f"{name}1", f"{name}2", f"{name}3"
+
+    def module(a, b, c, d):
+        a1, a2, a3 = signal(a)
+        b1, b2, b3 = signal(b)
+        c1, c2, c3 = signal(c)
+        d1, d2, d3 = signal(d)
+
+        return [
+            # stage 1
+            f"{a1} {a2} {a3} {b1} {b2} {b3} {c1} {d1}",
+            f"{a1}* {a2}* {a3}* {b1}* {b2}* {b3}*",
+
+            # stage 2
+            f"{a2} {a3} {b2} {b3} {c1} {c2} {d1} {d2}",
+            f"{a2}* {a3}* {b2}* {b3}* {c1}* {d1}*",
+
+            # stage 3
+            f"{a3} {b3} {c1} {c2} {c3} {d1} {d2} {d3}",
+            f"{a3}* {b3}* {c1}* {c2}* {d1}* {d2}*",
+
+            # sink layer
+            f"{c1}* {c2}* {c3}* {d1}* {d2}* {d3}*",
+
+            # explicit outputs
+            f"{c1} {c2} {c3}",
+            f"{d1} {d2} {d3}",
+        ]
+
+    # --- initial inputs (2 bundles) ---
+    monomers.append(" ".join(signal("x1")))
+    monomers.append(" ".join(signal("x2")))
+
+    # --- first module ---
+    monomers += module("x1", "x2", "y1", "z1")
+
+    # --- cascade ---
+    for i in range(2, depth + 1):
+        monomers += module(
+            f"y{i-1}", f"z{i-1}",
+            f"y{i}", f"z{i}"
+        )
+
+    return monomers
 
 # Binary Tree TBN
 
@@ -106,67 +156,6 @@ def generate_binary_tree(depth: int) -> list[str]:
 
     return monomers
 
-def generate_partial_tree(target_monomers: int) -> list[str]:
-    monomers = []
-    node_counter = 1
-    leaf_counter = 1
-
-    def signal(name):
-        return f"{name}_1", f"{name}_2"
-
-    def module(a, b, c):
-        a1, a2 = signal(a)
-        b1, b2 = signal(b)
-        c1, c2 = signal(c)
-        return [
-            f"{a1} {a2} {b1} {b2} {c1}",
-            f"{a1}* {a2}* {b1}* {b2}*",
-            f"{a2} {b1}",
-            f"{b2} {c1} {c2}",
-            f"{a2}* {b1}* {b2}* {c1}*",
-            f"{c1}* {c2}*",
-        ]
-
-    def new_leaf():
-        nonlocal leaf_counter
-        name = f"leaf{leaf_counter}"
-        leaf_counter += 1
-        monomers.append(f"{name}_1 {name}_2")
-        return name
-
-    # start with 2 leaves so we can form first module
-    leaves = [new_leaf(), new_leaf()]
-
-    # build first module
-    parent = f"node{node_counter}"
-    node_counter += 1
-    monomers.extend(module(leaves[0], leaves[1], parent))
-
-    # frontier = nodes we can expand (start with root)
-    frontier = [parent]
-
-    while True:
-        # check if we can afford another expansion
-        if len(monomers) + 8 > target_monomers:
-            break
-
-        # pick a node to expand (FIFO → uneven but not degenerate)
-        current = frontier.pop(0)
-
-        # create children
-        left = new_leaf()
-        right = new_leaf()
-
-        parent = f"node{node_counter}"
-        node_counter += 1
-
-        monomers.extend(module(left, right, parent))
-
-        # add children to frontier → allows deeper uneven growth
-        frontier.append(left)
-        frontier.append(right)
-
-    return monomers
 # -------------------------
 # Damien TBN
 # -------------------------
@@ -251,28 +240,23 @@ def write_monomers(filename: str, monomers: list[str], description: str = ""):
 # -------------------------
 
 if __name__ == "__main__":
-    # # Cascade: depths 2, 5, 10
-    # for n in [2, 5, 10]:
-    #     m = generate_cascade(n)
-    #     write_monomers(f"monomers_cascade_n{n}.txt", m, f"Linear cascade depth {n}")
+    # Cascade: depths 2, 5, 10
+    for n in [2, 5, 10]:
+        m = generate_cascade(n)
+        write_monomers(f"monomers_cascade_n{n}.txt", m, f"Linear cascade depth {n}")
 
-    # # Binary tree: depths 2, 3, 4
-    # for d in [2, 3, 4]:
-    #     m = generate_binary_tree(d)
-    #     write_monomers(f"monomers_binary_tree_d{d}.txt", m, f"Binary tree depth {d}")
+    # DNA TBN: depths
+    for d in [3, 4, 5, 6, 7, 8]:
+        m = generate_dna_tbn(d)
+        write_monomers(f"monomers_dna_tbn_depth{d}.txt", m, f"DNA TBN cascade depth {d}")
 
-    # Partial tree: target monomer counts 50, 100
-    for (n) in [120, 140, 160]:
-        monomers = generate_partial_tree(n)
-        write_monomers(f"monomers_partial_tree_n{n}.txt", monomers, f"Partial binary tree with ~{n} monomers")
+    # Binary tree: depths 2, 3, 4
+    for d in [2, 3, 4]:
+        m = generate_binary_tree(d)
+        write_monomers(f"monomers_binary_tree_d{d}.txt", m, f"Binary tree depth {d}")
 
-    # # Damien: lengths 5, 10
-    # for n in [5, 10]:
-    #     m = generate_damien(n)
-    #     write_monomers(f"monomers_damien_n{n}.txt", m, f"Damien 2-track TBN length {n}")
+    # Damien: lengths 5, 10
+    for n in [5, 10]:
+        m = generate_damien(n)
+        write_monomers(f"monomers_damien_n{n}.txt", m, f"Damien 2-track TBN length {n}")
 
-    # # Random: a few sizes
-    # for (nd, nm) in [(10, 20), (15, 30), (20, 40)]:
-    #     m = generate_random(nd, nm)
-    #     write_monomers(f"monomers_random_n{nd}_m{nm}.txt", m,
-    #                    f"Random TBN {nd} domains {nm} monomers")

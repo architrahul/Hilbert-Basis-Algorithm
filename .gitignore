@@ -2,3 +2,8 @@
 my_testing/*.db
 .DS_Store
 my_testing/logs/
+my_testing/pareto*
+my_testing/.DS_Store
+my_testing/tmp_monomers.txt
+my_testing/eqns.in
+my_testing/vectors.txt

@@ -6,15 +6,21 @@ import sys
 import argparse
 import itertools
 from collections import OrderedDict
+from unittest import result
 import requests
 from bs4 import BeautifulSoup
 import threading
+from export_polymers import save_polymer_vectors
 
 # Config
 
-monomer_file = "/Users/archit/Projects/Hilbert Basis Algorithm/example-tbns/cascade_n10.tbn"
+monomer_file = "/Users/archit/Projects/Hilbert Basis Algorithm/example-tbns/monomers_dna_tbn_depth8.txt"
 python_script = "monomers_to_normaliz.py"
 normaliz_exe = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz"
+
+save = True
+save_dir = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/pareto_optimal_set_dna8"
+os.makedirs(save_dir, exist_ok=True)
 
 
 tmp_monomers = "tmp_monomers.txt"
@@ -213,6 +219,49 @@ def fetch_covering_online(v: int, k: int, t: int) -> list[list[int]]:
     print(f"Retrieved {len(blocks)} blocks.")
     return blocks
 
+# Fetch covering local
+
+import os
+import csv
+
+
+def fetch_covering_local(v: int, k: int, t: int, base_dir: str) -> list[list[int]]:
+    """
+    Load a covering design C(v,k,t) from a local CSV file.
+
+    Expected file format:
+        {base_dir}/C_{v}_k_{t}/C{v}_{k}_{t}_actual_cover.csv
+
+    Returns:
+        blocks: list of blocks, where each block is a list[int]
+    """
+
+    path = os.path.join(
+        base_dir,
+        f"C_{v}_k_{t}",
+        f"C{v}_{k}_{t}_actual_cover.csv"
+    )
+
+    print(f"Loading covering C({v},{k},{t}) from local file: {path}")
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"No local covering file found for C({v},{k},{t}): {path}")
+
+    blocks = []
+
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+
+        for row in reader:
+            block_str = row["block"].strip()
+            block = [int(x) for x in block_str.split()]
+            blocks.append(block)
+
+    if not blocks:
+        raise RuntimeError(f"No covering blocks found in file for C({v},{k},{t})")
+
+    print(f"Retrieved {len(blocks)} blocks.")
+    return blocks
 
 # -------------------------
 # Greedy covering design
@@ -281,7 +330,12 @@ def run_for_k_value_monomer(k, all_monomers, n, t, min_total_time, log, fallback
     print(f"{'='*70}\n")
 
     try:
-        blocks = list(load_covering_blocks(n, k, t, fallback_greedy=fallback_greedy))
+        if n == 21 and t == 12 and k != 21:
+            blocks = list(fetch_covering_local(n, k, t, base_dir="/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/pareto_optimal_set_damien"))
+        elif n == 60 and t == 5 and k != 60:
+            blocks = list(fetch_covering_local(n, k, t, base_dir="/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/pareto_optimal_set_cascade7"))
+        else:
+            blocks = list(load_covering_blocks(n, k, t, fallback_greedy=fallback_greedy))
     except (RuntimeError, requests.RequestException) as e:
         print(f"Skipping k={k}: {e}")
         log.write(f"\nk={k}: SKIPPED (covering unavailable: {e})\n")
@@ -582,7 +636,8 @@ def _finish_run(k, num_subsets, times, all_hilbert_vectors, log, wall_start):
         "total_normaliz_time": normaliz_time,
         "overhead_time": overhead,
         "avg_normaliz_time_per_subset": avg_normaliz,
-        "unique_vectors": len(all_hilbert_vectors)
+        "unique_vectors": len(all_hilbert_vectors),
+        "vectors": all_hilbert_vectors
     }, normaliz_time
 
 
@@ -666,7 +721,7 @@ def validate_args(args, n_monomers, n_domains):
 
         # Online repository limits
         if not args.fallback_greedy:
-            if n >= 100 or args.k_start > 25 or args.t > 8:
+            if n >= 100 or args.k_start > 25 or (args.t > 8 and args.t != 12): # t=12 is a special case stored for n=21 in the local directory
                 issues = []
                 if n >= 100:
                     issues.append(f"n={n} >= 100")
@@ -874,11 +929,22 @@ def main():
                 cleanup_normaliz_files()
                 return
 
-        if result is not None:
-            print(f"\nNaive k={k}: {result['total_normaliz_time']:.2f}s total, "
-                  f"{result['unique_vectors']} unique Pareto-optimal polymers found")
-        else:
-            print("\nNaive run did not complete.")
+            if result is not None:
+                print(f"\nNaive k={k}: {result['total_normaliz_time']:.2f}s total, "
+                    f"{result['unique_vectors']} unique Pareto-optimal polymers found")
+
+                if save:
+                    output_path = os.path.join(
+                        save_dir,
+                        f"hilbert_{n_for_covering}_k{k}_{args.t}_naive.txt"
+                    )
+
+                    save_polymer_vectors(
+                        result["vectors"],
+                        output_path,
+                        n_monomers=n_monomers,
+                        comment=f"naive mode, k={k}"
+                    )
 
         cleanup_normaliz_files()
         return
@@ -912,6 +978,12 @@ def main():
         )
 
         try:
+            if n_for_covering == 60 and args.t == 5:
+                print("Using local covering design for C(60, k, 5) from my_testing directory")
+                # add k=26, 27, 28, 29,30,35,40,45,50 to the list of k_values to test with the local covering designs
+                k_values.extend([26, 27, 28, 29, 30, 35, 40, 45, 50])
+                # remove 1 to 25 and then sort in descending order
+                k_values = sorted(set(k_values) - set(range(1, 26)), reverse=True)
             for k in k_values:
                 if args.mode == "monomer":
                     result, new_time = run_for_k_value_monomer(
@@ -924,10 +996,27 @@ def main():
                         args.t, min_total_time, log, args.fallback_greedy, args.tolerance
                     )
 
+                if new_time < min_total_time:
+                    min_total_time = new_time
+
                 if result is None:
                     continue
 
                 results.append(result)
+
+                if save:
+                    output_path = os.path.join(
+                        save_dir,
+                        f"hilbert_{n_for_covering}_k{result['k']}_t{args.t}_covering.txt"
+                    )
+
+                    save_polymer_vectors(
+                        result["vectors"],
+                        output_path,
+                        n_monomers=n_monomers,
+                        comment=f"covering mode, k={result['k']}, t={args.t}"
+                    )
+
                 if new_time < min_total_time:
                     min_total_time = new_time
 

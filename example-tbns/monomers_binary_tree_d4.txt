@@ -97,3 +97,11 @@ node11_1 node11_2 node12_1 node12_2 node14_1
 node11_1* node11_2* node12_1* node12_2*
 node11_2 node12_1
 node12_2 node14_1 node14_2
+node11_2* node12_1* node12_2* node14_1*
+node14_1* node14_2*
+node13_1 node13_2 node14_1 node14_2 node15_1
+node13_1* node13_2* node14_1* node14_2*
+node13_2 node14_1
+node14_2 node15_1 node15_2
+node13_2* node14_1* node14_2* node15_1*
+node15_1* node15_2*
