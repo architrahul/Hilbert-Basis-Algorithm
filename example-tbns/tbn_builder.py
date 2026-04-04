@@ -241,7 +241,7 @@ def write_monomers(filename: str, monomers: list[str], description: str = ""):
 
 if __name__ == "__main__":
     # Cascade: depths 2, 5, 10
-    for n in [2, 5, 10]:
+    for n in [2, 5, 6, 7, 8, 9, 10]:
         m = generate_cascade(n)
         write_monomers(f"monomers_cascade_n{n}.txt", m, f"Linear cascade depth {n}")
 

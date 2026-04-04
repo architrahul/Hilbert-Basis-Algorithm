@@ -8,7 +8,7 @@ import os
 # -------------------------
 def parse_monomers(path):
     monomers = []
-    domain_pattern = re.compile(r"[a-zA-Z]+\d+\*?")
+    domain_pattern = re.compile(r"[a-zA-Z]+\d+_\d+\*?")
 
     with open(path) as f:
         for line in f:
@@ -153,9 +153,9 @@ def generate_coffee_inputs(monomers, polymer_file, out_dir, domain_energy):
 # -------------------------
 if __name__ == "__main__":
 
-    monomer_file = "/Users/archit/Projects/Hilbert Basis Algorithm/example-tbns/monomers_dna_tbn_depth4.txt"
-    polymer_dir = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/pareto_optimal_set_dna4"
-    base_out_dir = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/pareto_optimal_set_dna4/coffee_input"
+    monomer_file = "/Users/archit/Projects/Hilbert Basis Algorithm/example-tbns/cascade_n10_incomplete.txt"
+    polymer_dir = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/pareto_optimal_set_cascade10"
+    base_out_dir = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/pareto_optimal_set_cascade10/coffee_input"
 
     # Parse monomers ONCE
     monomers = parse_monomers(monomer_file)
@@ -163,10 +163,10 @@ if __name__ == "__main__":
     # Assign energies ONCE and reuse everywhere
     domain_energy = assign_domain_energies(monomers, seed=42)
 
-    # k from 8 to 25+ 38
-    for k in list(range(8, 26)) + [38]:
-        polymer_file = os.path.join(polymer_dir, f"hilbert_38_k{k}_t5_covering.txt")
-        out_dir = os.path.join(base_out_dir, f"k{k}")
+    # for (n) in [81, 80]:
+    for (n) in [80]:
+        polymer_file = os.path.join(polymer_dir, f"hilbert_{n}_k25_t5_covering.txt")
+        out_dir = os.path.join(base_out_dir, f"n{n}_k25_t5")
 
         generate_coffee_inputs(
             monomers=monomers,

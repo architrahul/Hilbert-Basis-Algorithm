@@ -11,15 +11,16 @@ import requests
 from bs4 import BeautifulSoup
 import threading
 from export_polymers import save_polymer_vectors
+import numpy as np
 
 # Config
 
-monomer_file = "/Users/archit/Projects/Hilbert Basis Algorithm/example-tbns/monomers_dna_tbn_depth8.txt"
+monomer_file = "/Users/archit/Projects/Hilbert Basis Algorithm/example-tbns/cascade_n10.txt"
 python_script = "monomers_to_normaliz.py"
 normaliz_exe = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/Normaliz/source/normaliz"
 
 save = True
-save_dir = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/pareto_optimal_set_dna8"
+save_dir = "/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/pareto_optimal_set_cascade10"
 os.makedirs(save_dir, exist_ok=True)
 
 
@@ -330,10 +331,8 @@ def run_for_k_value_monomer(k, all_monomers, n, t, min_total_time, log, fallback
     print(f"{'='*70}\n")
 
     try:
-        if n == 21 and t == 12 and k != 21:
-            blocks = list(fetch_covering_local(n, k, t, base_dir="/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/pareto_optimal_set_damien"))
-        elif n == 60 and t == 5 and k != 60:
-            blocks = list(fetch_covering_local(n, k, t, base_dir="/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/pareto_optimal_set_cascade7"))
+        if n == 57 and t == 5 and k != 57:
+            blocks = list(fetch_covering_local(n, k, t, base_dir="/Users/archit/Projects/Hilbert Basis Algorithm/my_testing/pareto_optimal_set_cascade8"))
         else:
             blocks = list(load_covering_blocks(n, k, t, fallback_greedy=fallback_greedy))
     except (RuntimeError, requests.RequestException) as e:
@@ -358,6 +357,10 @@ def run_for_k_value_monomer(k, all_monomers, n, t, min_total_time, log, fallback
             avg_time = probe_time / probe_size if probe_size else 0
             estimated_total = avg_time * num_subsets
             print(f"Probe complete: avg={avg_time:.3f}s, estimated total={estimated_total:.2f}s")
+            # write estimated total to log for reference
+            log.write(f"\nk={k}: PROBE complete\n"
+                      f"  Probe time: {probe_time:.3f}s for {probe_size} subsets\n"
+                      f"  Estimated total time for full run: {estimated_total:.2f}s\n")
 
             if estimated_total > min_total_time * tolerance:
                 print(f"PRUNED k={k}: estimated {estimated_total:.2f}s > best {min_total_time:.2f}s * tolerance {tolerance}")
@@ -953,6 +956,12 @@ def main():
     # COVERING STRATEGY
     # -------------------------
     k_values = list(range(args.k_start, args.t, -1))
+
+    # also add 26, 27, 28, 29, 30, 35, 40, 45, 50 for t=5 since those are available in the local directory for n=57
+    if args.t == 5 and n_for_covering == 57:
+        extra_k = [26, 27, 28, 29, 30, 35, 40, 45, 50]
+        k_values = sorted(set(k_values + extra_k), reverse=True)
+
     if args.include_base and n_for_covering not in k_values:
         k_values = [n_for_covering] + k_values
 
@@ -978,12 +987,6 @@ def main():
         )
 
         try:
-            if n_for_covering == 60 and args.t == 5:
-                print("Using local covering design for C(60, k, 5) from my_testing directory")
-                # add k=26, 27, 28, 29,30,35,40,45,50 to the list of k_values to test with the local covering designs
-                k_values.extend([26, 27, 28, 29, 30, 35, 40, 45, 50])
-                # remove 1 to 25 and then sort in descending order
-                k_values = sorted(set(k_values) - set(range(1, 26)), reverse=True)
             for k in k_values:
                 if args.mode == "monomer":
                     result, new_time = run_for_k_value_monomer(
@@ -1037,7 +1040,6 @@ def main():
               "Try increasing --tolerance, lowering --k-start, or adding --fallback-greedy.")
 
     cleanup_normaliz_files()
-
 
 if __name__ == "__main__":
     main()
