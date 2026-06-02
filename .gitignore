@@ -15,9 +15,11 @@ src/Normaliz/
 **/tmp_monomers.txt
 **/vectors.txt
 
-results.zip
 results/
+results.zip
+backup/
 backup_results/
+results2/
 
 AGENTS.md
 .claude/
@@ -26,3 +28,9 @@ covering_design_validation/
 reference papers/
 
 src/.normaliz_tmp
+
+
+
+# NUPACK/concentrations executable is proprietary/local; do not redistribute
+concentrations
+concentrations.exe

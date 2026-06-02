@@ -69,7 +69,7 @@ def assign_domain_energies(monomers, seed=42):
 
     energies = {}
     for d in sorted(domain_types):
-        energies[d] = -20.0
+        energies[d] = -10.0
 
     return energies
 
@@ -180,13 +180,21 @@ def write_ocx(polymers, energies, output_path):
 # normal: all monomers at 1 µM
 # leak:   input signal monomers at 0, everything else at 1 µM
 # -------------------------
-def write_con(n_monomers, output_path, zero_indices=None):
+def write_con(n_monomers, output_path, zero_indices=None, concentrations=None):
+    """Write a .con file.
+
+    If `concentrations` is provided, it must contain one concentration per
+    monomer and is written directly. Otherwise, legacy behavior is used:
+    monomers in `zero_indices` are set to 0 and all others to 1 µM.
     """
-    Writes a .con file.
-    - zero_indices: set/list of monomer indices (0-based) whose concentration
-                    should be 0 (used for the leak experiment).
-    All other monomers are set to 1 µM.
-    """
+    if concentrations is not None:
+        if len(concentrations) != n_monomers:
+            raise ValueError(f"expected {n_monomers} concentrations, got {len(concentrations)}")
+        with open(output_path, "w") as f:
+            for c in concentrations:
+                f.write(f"{float(c):.6e}\n")
+        return
+
     zero_set = set(zero_indices) if zero_indices else set()
 
     with open(output_path, "w") as f:
@@ -210,7 +218,7 @@ def write_domain_energies(domain_energy, output_path):
 # Main pipeline
 # -------------------------
 def generate_coffee_inputs(monomers, polymer_file, out_dir, domain_energy,
-                           zero_indices=None, label=""):
+                           zero_indices=None, label="", concentrations=None):
     os.makedirs(out_dir, exist_ok=True)
 
     polymers = read_polymers(polymer_file)
@@ -222,14 +230,18 @@ def generate_coffee_inputs(monomers, polymer_file, out_dir, domain_energy,
 
     write_ocx(polymers, energies, os.path.join(out_dir, "input.ocx"))
     write_con(len(monomers), os.path.join(out_dir, "input.con"),
-              zero_indices=zero_indices)
+              zero_indices=zero_indices, concentrations=concentrations)
     write_domain_energies(domain_energy, os.path.join(out_dir, "domain_energies.txt"))
 
     n_zero = len(zero_indices) if zero_indices else 0
     print(f"[{label}] Generated COFFEE inputs in: {out_dir}")
     print(f"  Polymers : {len(polymers)}")
-    print(f"  Monomers : {len(monomers)}  ({n_zero} set to 0 conc, "
-          f"{len(monomers) - n_zero} at 1 µM)")
+    if concentrations is not None:
+        nonzero = sum(1 for c in concentrations if float(c) != 0.0)
+        print(f"  Monomers : {len(monomers)}  ({nonzero} nonzero custom initial concentrations)")
+    else:
+        print(f"  Monomers : {len(monomers)}  ({n_zero} set to 0 conc, "
+              f"{len(monomers) - n_zero} at 1 µM)")
 
 
 # -------------------------

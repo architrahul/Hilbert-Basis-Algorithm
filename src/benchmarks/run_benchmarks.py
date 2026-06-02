@@ -3,15 +3,18 @@
 Consolidated benchmark runner for the paper experiments.
 
 This is the single entry point for the experiments described in the README.
-It writes organized CSVs and figures under
+All benchmark experiments write organized CSVs and figures under
 
     results/benchmarks/
 
 Experiments:
   1. runtime-vs-k probe curves for cascade-7 and damien-10
   2. runtime-vs-t, best k by probing, plus Full-HB baselines
-  3. equilibrium recovery: full P* vs t=3 and t=5 on cascade-7 incomplete
-  4. leakage analysis: removed-input sweep and t sweep on cascade-7 incomplete
+  3. equilibrium recovery under the 10 nM / 100 nM leakage regime
+  4. retired in the new regime
+  5. scaling analysis under the 10 nM / 100 nM leakage regime
+  6. bond-energy/concentration sweep using the concentrations executable
+  7. leakage position under the 10 nM / 100 nM leakage regime
 
 The script is resumable: most outputs are cached by the helper scripts or by
 checking result CSVs. Delete the corresponding subdirectory under
@@ -43,7 +46,7 @@ import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from paths import EXAMPLE_TBNS_DIR, RESULTS_DIR, HILBERT_BASIS_DIR, COFFEE_RESULTS_DIR
+from paths import EXAMPLE_TBNS_DIR, REPO_ROOT
 from hilbert_pipeline import (
     NORMALIZ_TIMEOUT_SECONDS,
     cleanup_normaliz_files,
@@ -57,8 +60,9 @@ from hilbert_pipeline import (
     start_input_listener,
 )
 
-BENCH_DIR = Path(RESULTS_DIR) / "benchmarks"
-HB_DIR = Path(HILBERT_BASIS_DIR)
+RESULTS_ROOT = Path(REPO_ROOT) / "results"
+BENCH_DIR = RESULTS_ROOT / "benchmarks"
+HB_DIR = RESULTS_ROOT / "common" / "hilbert_basis"
 LOG_DIR = BENCH_DIR / "logs"
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -67,6 +71,7 @@ PHASE2_FULL_RUN_CAP_S = 30 * 60
 EXP1_T = 5
 CUTOFF_M = 1e-9
 ENABLE_LOGS = False
+NEW_REGIME_BOND_ENERGIES = [-10.0]
 
 
 class NullLog:
@@ -149,7 +154,7 @@ def k_values_runtime_vs_k(n: int, t: int, allow_after_25: bool) -> list[int]:
 
 def run_subprocess(args: list[str]) -> None:
     args = list(args)
-    if ENABLE_LOGS and args and args[0] in {"leakage_compute_all.py", "leakage_experiment_t.py", "leakage_analysis.py"}:
+    if ENABLE_LOGS and args and args[0] in {"leakage_compute_all.py", "leakage_experiment_t.py", "leakage_analysis.py", "experiment5_scaling.py", "experiment3_equilibrium_recovery.py"}:
         args.append("--logs")
     print("$", " ".join(args))
     subprocess.run([sys.executable, "-u"] + args, cwd=SCRIPT_DIR, check=True)
@@ -440,80 +445,47 @@ def plot_runtime_by_t(cover_csv: Path, full_csv: Path, out_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def experiment3_equilibrium_recovery() -> None:
-    out_dir = BENCH_DIR / "03_equilibrium_recovery"
-    figs_dir = out_dir / "figures"
-    csv_dir = out_dir / "csv"
-    for d in [figs_dir, csv_dir]:
-        d.mkdir(parents=True, exist_ok=True)
-
-    run_subprocess(["leakage_compute_all.py", "--n", "7"])
-    run_subprocess(["leakage_coffee.py", "--n", "7"])
-    run_subprocess(["plot_leakage_figures.py", "--n", "7"])
-    run_subprocess(["dump_sorted_polymers.py", "--n", "7", "--top", "50"])
-
-    maybe_copy(Path(RESULTS_DIR) / "figures" / "figure5_leakage_t3.png", figs_dir / "equilibrium_relative_error_t3.png")
-    maybe_copy(Path(RESULTS_DIR) / "figures" / "figure6_leakage_t5.png", figs_dir / "equilibrium_relative_error_t5.png")
-
-    # Keep large reusable files only in results/common/. This experiment folder
-    # stores a compact index pointing to the shared Hilbert bases and COFFEE
-    # outputs instead of copying hundreds of MB into a second location.
-    hb_base = Path(HILBERT_BASIS_DIR)
-    coffee_base = Path(COFFEE_RESULTS_DIR) / "n7_incomplete"
-    rows = []
-    for tag, hb_name in [
-        ("full_pstar", "hilbert_full_p_star_n7_incomplete.txt"),
-        ("k25_t3", "hilbert_k25_t3_monomer_n7_incomplete.txt"),
-        ("k25_t5", "hilbert_k25_t5_monomer_n7_incomplete.txt"),
-    ]:
-        d = coffee_base / tag
-        rows.append(dict(
-            set=tag,
-            shared_hilbert_basis=str(hb_base / hb_name),
-            shared_coffee_dir=str(d),
-            coffee_output=str(d / "coffee_output.txt"),
-            sorted_csv=str(d / "coffee_output_sorted.csv"),
-            polymers_sorted=str(d / "polymers_sorted.csv"),
-        ))
-    write_csv(csv_dir / "equilibrium_outputs.csv", rows, [
-        "set", "shared_hilbert_basis", "shared_coffee_dir",
-        "coffee_output", "sorted_csv", "polymers_sorted",
-    ])
+    for energy in NEW_REGIME_BOND_ENERGIES:
+        run_subprocess(["experiment3_equilibrium_recovery.py", "--bond-energy", str(energy)])
 
 # ---------------------------------------------------------------------------
 # Experiment 4 — leakage analysis
 # ---------------------------------------------------------------------------
 
 def experiment4_leakage() -> None:
-    out_dir = BENCH_DIR / "04_leakage"
-    removed_dir = out_dir / "removed_inputs"
-    vary_t_dir = out_dir / "vary_t"
-    csv_dir = out_dir / "csv"
-    for d in [removed_dir, vary_t_dir, csv_dir]:
-        d.mkdir(parents=True, exist_ok=True)
+    print("Experiment 4 has been retired for the new leakage regime; use Experiments 5 and 7.")
 
-    # 4.1 removed-input sweep K=1..7
-    run_subprocess(["leakage_experiment_inputs.py", "--n", "7", "--K-values", "1", "3", "4", "5", "6", "7", "8"])
-    src1 = Path(RESULTS_DIR) / "leakage" / "analysis" / "vary_removed_inputs" / "n7_systems_compare"
-    maybe_copy(src1 / "summary.json", removed_dir / "summary.json")
-    maybe_copy(src1 / "figure_leakage_vs_K.png", removed_dir / "leakage_vs_removed_inputs.png")
-    for f in src1.glob("K*/polymers_sorted.csv"):
-        maybe_copy(f, removed_dir / f.parent.name / "polymers_sorted.csv")
-    for f in src1.glob("K*/polymer_compare.csv"):
-        maybe_copy(f, removed_dir / f.parent.name / "polymer_compare.csv")
 
-    # 4.2 t sweep for K=1 incomplete cascade
-    run_subprocess(["leakage_experiment_t.py", "--n", "7"])
-    src2 = Path(RESULTS_DIR) / "leakage" / "analysis" / "vary_t" / "n7_incomplete"
-    maybe_copy(src2 / "summary.json", vary_t_dir / "summary.json")
-    maybe_copy(src2 / "figure_leakage_vs_t.png", vary_t_dir / "leakage_vs_t.png")
-    for f in src2.glob("polymer_compare*.csv"):
-        maybe_copy(f, vary_t_dir / f.name)
+# ---------------------------------------------------------------------------
+# Experiment 5 — scaling incomplete cascades
+# ---------------------------------------------------------------------------
 
-    run_subprocess(["export_csv.py"])
-    maybe_copy(Path(RESULTS_DIR) / "csv" / "leakage_vs_K.csv", csv_dir / "leakage_vs_removed_inputs.csv")
-    maybe_copy(Path(RESULTS_DIR) / "csv" / "leakage_vs_t.csv", csv_dir / "leakage_vs_t.csv")
-    maybe_copy(Path(RESULTS_DIR) / "csv" / "leakage_vs_K_per_polymer.csv", csv_dir / "leakage_vs_removed_inputs_per_polymer.csv")
-    maybe_copy(Path(RESULTS_DIR) / "csv" / "leakage_vs_t_per_polymer.csv", csv_dir / "leakage_vs_t_per_polymer.csv")
+def experiment5_scaling() -> None:
+    out_dir = BENCH_DIR / "05_scaling"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for energy in NEW_REGIME_BOND_ENERGIES:
+        run_subprocess(["experiment5_scaling.py", "--bond-energy", str(energy)])
+
+
+# ---------------------------------------------------------------------------
+# Experiment 6 — bond-energy sweep
+# ---------------------------------------------------------------------------
+
+def experiment6_bond_energy() -> None:
+    out_dir = BENCH_DIR / "06_bond_energy"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    run_subprocess(["experiment6_bond_energy_concentrations.py", "--include-correct", "--bond-energies"] + [str(e) for e in NEW_REGIME_BOND_ENERGIES])
+
+
+# ---------------------------------------------------------------------------
+# Experiment 7 — leakage by missing-input position
+# ---------------------------------------------------------------------------
+
+def experiment7_leakage_position() -> None:
+    out_dir = BENCH_DIR / "07_leakage_position"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for energy in NEW_REGIME_BOND_ENERGIES:
+        run_subprocess(["experiment7_leakage_position.py", "--bond-energy", str(energy)])
 
 
 # ---------------------------------------------------------------------------
@@ -523,19 +495,22 @@ def experiment4_leakage() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
-        "--experiments", nargs="+", default=["1", "2", "3", "4"],
-        choices=["1", "2", "3", "4", "runtime-vs-k", "runtime-by-t", "equilibrium", "leakage", "all"],
-        help="Experiments to run. Default: 1 2 3 4.",
+        "--experiments", nargs="+", default=["1", "2", "3", "4", "5", "6", "7"],
+        choices=["1", "2", "3", "4", "5", "6", "7", "runtime-vs-k", "runtime-by-t", "equilibrium", "leakage", "scaling", "bond-energy", "leakage-position", "all"],
+        help="Experiments to run. Default: 1 2 3 4 5 6 7.",
     )
     parser.add_argument("--logs", action="store_true", help="Write verbose benchmark/pipeline logs. Default: no verbose log files.")
+    parser.add_argument("--bond-energies", nargs="+", type=float, default=[-10.0], help="Bond energies for new-regime Experiments 3 and 5--7. Default: -10. Example: --bond-energies -10 -20")
+    parser.add_argument("--bond-energy", type=float, default=None, help="Deprecated single-energy alias for --bond-energies.")
     args = parser.parse_args()
 
-    global ENABLE_LOGS
+    global ENABLE_LOGS, NEW_REGIME_BOND_ENERGIES
     ENABLE_LOGS = args.logs
+    NEW_REGIME_BOND_ENERGIES = [float(args.bond_energy)] if args.bond_energy is not None else [float(e) for e in args.bond_energies]
     ensure_dirs()
     selected = set(args.experiments)
     if "all" in selected:
-        selected = {"1", "2", "3", "4"}
+        selected = {"1", "2", "3", "4", "5", "6", "7"}
 
     if "1" in selected or "runtime-vs-k" in selected:
         experiment1_runtime_vs_k()
@@ -545,6 +520,12 @@ def main() -> None:
         experiment3_equilibrium_recovery()
     if "4" in selected or "leakage" in selected:
         experiment4_leakage()
+    if "5" in selected or "scaling" in selected:
+        experiment5_scaling()
+    if "6" in selected or "bond-energy" in selected:
+        experiment6_bond_energy()
+    if "7" in selected or "leakage-position" in selected:
+        experiment7_leakage_position()
 
     print(f"\nAll requested experiments complete. Organized outputs: {BENCH_DIR}")
 

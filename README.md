@@ -18,7 +18,7 @@ src/coffee_pipeline.py    Build COFFEE inputs, run COFFEE, write sorted CSV outp
 src/coffee_parser.py      Shared COFFEE helpers
 src/benchmarks/           Paper benchmark and leakage-analysis scripts
 coffee/                   COFFEE source checkout
-results/                  Generated outputs; safe to delete/regenerate
+results/                  Generated benchmark outputs; safe to delete/regenerate
 ```
 
 ---
@@ -341,6 +341,36 @@ concentration_M,polymer_vector
 2.630000e-09,0 1 1 1 1 1 0 0
 ```
 
+
+---
+
+## 4. Optional: install the NUPACK `concentrations` executable
+
+Experiment 6 uses the NUPACK-style `concentrations` executable. This binary is not redistributed with this repository. Download or build it from your licensed/local NUPACK installation, then either:
+
+1. place the executable at the repository root as:
+
+```bash
+./concentrations
+```
+
+2. or pass its path explicitly when running Experiment 6:
+
+```bash
+python src/benchmarks/experiment6_bond_energy_concentrations.py \
+  --concentrations-exe /path/to/concentrations \
+  --bond-energies -10 -20 \
+  --include-correct
+```
+
+The benchmark script runs it from the directory containing `input.ocx` and `input.con` as:
+
+```bash
+/path/to/concentrations input
+```
+
+The executable is ignored by git and should not be committed.
+
 ---
 
 ## Reproduce the paper experiments
@@ -371,15 +401,21 @@ python src/benchmarks/run_benchmarks.py --experiments 1              # runtime v
 python src/benchmarks/run_benchmarks.py --experiments 2              # runtime vs t + Full HB
 python src/benchmarks/run_benchmarks.py --experiments 3              # equilibrium recovery
 python src/benchmarks/run_benchmarks.py --experiments 4              # leakage analysis
+python src/benchmarks/run_benchmarks.py --experiments 5              # scaling analysis
+python src/benchmarks/run_benchmarks.py --experiments 6              # bond-energy sweep
+python src/benchmarks/run_benchmarks.py --experiments 7              # leakage position
 python src/benchmarks/run_benchmarks.py --experiments 1 3            # multiple selected experiments
 ```
 
-The four experiments are:
+The seven experiments are:
 
 1. **Runtime vs k** for `linear_cascade_n7` and `damien_n10`. Cascade-7 uses the DP covering fallback and, after `k=25`, tests `k` in increments of 5.
 2. **Runtime vs t** for linear cascades `m=5..9`, binary trees `d=3,4`, and DNA cascades `m=4..7`. For each `(system,t)`, the script probes `k`, records the probe time, runs the best covering enumeration only if the projected time is below 30 minutes, and also runs the Full-HB baseline.
-3. **Equilibrium recovery** for cascade-7 with the first input removed: full P* versus `t=3` and `t=5` at `k=25`, using COFFEE at `1 µM` initial concentration and `-20` binding energy.
-4. **Leakage analysis**: first compare systems where exactly one input is removed (`x1`, `x2`, …, `x7`), then compare leakage for different `t` values against full P*. Leakage summaries include all expected and unexpected candidate polymers; no concentration cutoff is applied.
+3. **Equilibrium recovery** for cascade-7 under the current leakage regime. For both leak (`X1=0`) and correct-output (`X1=10 nM`) cases, compare the full candidate set against covering `t=3` and `t=5`, with relative-error cutoff `1e-10 M`.
+4. **Retired** in the current consolidated benchmark set.
+5. **Scaling/comparison analysis** for linear cascades across module lengths. It compares leak (`X1=0`) and correct-output (`X1=10 nM`) final-output concentrations for covering/full candidate sets already cached under `results/common/hilbert_basis/`.
+6. **Bond-energy / concentrations-executable sweep**: reuse Experiment-5 Hilbert bases and run the `concentrations` executable for the requested bond energies. Plots leak and correct-output curves separately.
+7. **Leakage position**: seven-module linear cascade, one missing input position at a time, using covering `k=25,t=5`; compares each leak position against the correct-output case.
 
 Outputs are written to:
 
@@ -390,13 +426,13 @@ results/benchmarks/02_runtime_by_t/
   probe_details.csv, runtime CSVs, runtime_by_t_*.png
 results/benchmarks/03_equilibrium_recovery/
   figures/        equilibrium relative-error plots
-  csv/            compact output index
-  hilbert_basis/  full and reduced polymer-vector files
-  coffee/         COFFEE inputs, raw outputs, and sorted polymer CSVs
-results/benchmarks/04_leakage/
-  removed_inputs/ removed-input sweep summary, plot, per-K CSVs
-  vary_t/         t-sweep summary, plot, per-polymer CSVs
-  csv/            tidy aggregate CSV exports
+  csv/            compact output index and per-polymer relative-error CSVs
+results/benchmarks/05_scaling/
+  csv/ and figures/ for final output versus cascade length
+results/benchmarks/06_bond_energy_concentrations/
+  csv/ and figures/ for concentrations-executable bond-energy comparisons
+results/benchmarks/07_leakage_position/
+  csv/ and figures/ for leakage position comparisons
 ```
 
 Shared caches used across experiments live at:
@@ -414,3 +450,12 @@ results/benchmarks/logs/              verbose logs, only when run with --logs
 - Each Normaliz call is capped at 3 hours in `hilbert_pipeline.py`.
 - Phase 2 benchmark full enumerations are skipped when the probe-projected time is over 30 minutes.
 - `normaliz_watchdog.sh` is available as an external backup watchdog.
+
+
+### New leakage concentration regime
+
+Experiments 3 and 5--7 use the current leakage regime and write to `results/`: inputs at 10 nM, non-input monomers at 100 nM, optional Regime-B +50 nM background except final output, and configurable bond energies. Example:
+
+```bash
+python src/benchmarks/run_benchmarks.py --experiments 3 5 6 7 --bond-energies -10 -20
+```
