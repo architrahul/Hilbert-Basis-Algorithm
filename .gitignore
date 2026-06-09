@@ -18,6 +18,7 @@ src/Normaliz/
 results/
 results.zip
 backup/
+backup.zip
 
 AGENTS.md
 .claude/
